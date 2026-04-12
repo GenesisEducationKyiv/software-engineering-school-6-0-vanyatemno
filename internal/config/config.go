@@ -13,7 +13,8 @@ type Database struct {
 }
 
 type Application struct {
-	Port string `mapstructure:"PORT" json:"PORT" yaml:"PORT"`
+	Port   string `mapstructure:"PORT" json:"PORT" yaml:"PORT"`
+	APIKey string `mapstructure:"API_KEY" json:"API_KEY" yaml:"API_KEY"`
 }
 
 type Github struct {

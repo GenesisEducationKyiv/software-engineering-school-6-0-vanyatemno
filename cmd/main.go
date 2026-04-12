@@ -74,14 +74,13 @@ func main() {
 	// Cron
 	cron := cronScheduler.New(ctx, &cfg.Cron, repositoryService)
 	cron.Start()
-	defer cron.Stop()
 
 	// Controllers
 	subscriptionController := controllers.NewSubscriptionController(subscriptionService)
 
 	// Router
 	r := gin.Default()
-	controllers.RegisterRoutes(r, subscriptionController)
+	controllers.RegisterRoutes(r, subscriptionController, &cfg.Application)
 
 	port := cfg.Application.Port
 	if port == "" {
@@ -92,4 +91,5 @@ func main() {
 	if err := r.Run(":" + port); err != nil {
 		zap.L().Fatal("failed to start server", zap.Error(err))
 	}
+	cron.Stop()
 }
