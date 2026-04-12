@@ -4,6 +4,7 @@ import "context"
 
 type GithubIntegrationMock struct {
 	versionToReturn string
+	errToReturn     error
 }
 
 func NewGithubIntegrationMock(versionToReturn string) *GithubIntegrationMock {
@@ -13,9 +14,13 @@ func NewGithubIntegrationMock(versionToReturn string) *GithubIntegrationMock {
 }
 
 func (m *GithubIntegrationMock) GetRepositoryVersion(_ context.Context, _, _ string) (string, error) {
-	return m.versionToReturn, nil
+	return m.versionToReturn, m.errToReturn
 }
 
 func (m *GithubIntegrationMock) SetVersionToReturn(version string) {
 	m.versionToReturn = version
+}
+
+func (m *GithubIntegrationMock) SetErrToReturn(err error) {
+	m.errToReturn = err
 }
