@@ -13,7 +13,7 @@ func TestTemplates(t *testing.T) {
 	_, err := service.RenderTemplate(
 		Confirmation,
 		map[string]string{
-			"Code": "codes",
+			"Code": "code",
 			"Link": "link",
 		},
 	)

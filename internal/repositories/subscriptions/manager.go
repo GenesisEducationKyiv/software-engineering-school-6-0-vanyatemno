@@ -1,9 +1,9 @@
-package subscriptions
+package subscription
 
 import "se-school/internal/models"
 
-func (r *Repository) Create(subscription *models.Subscription) (*models.Subscription, error) {
-	return subscription, r.db.Create(subscription).Error
+func (r *Repository) Create(subscription *models.Subscription) error {
+	return r.db.Create(subscription).Error
 }
 
 func (r *Repository) UpdateLastSeenTag(id uint, tag string) error {

@@ -1,4 +1,4 @@
-package subscriptions
+package subscription
 
 import "se-school/internal/models"
 
