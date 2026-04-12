@@ -7,6 +7,7 @@ import (
 	"se-school/internal/controllers"
 	cronScheduler "se-school/internal/cron"
 	"se-school/internal/infrastructure/db"
+	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
 	"se-school/internal/notifications"
 	"se-school/internal/notifications/mailer"
@@ -54,13 +55,18 @@ func main() {
 		zap.L().Fatal("failed to connect to database", zap.Error(err))
 	}
 
+	redisClient, err := redisInfra.Connect(ctx, &cfg.Redis)
+	if err != nil {
+		zap.L().Fatal("failed to connect to redis", zap.Error(err))
+	}
+
 	// Repositories
 	subscriptionRepository := subRepo.New(database)
 	repositoryRepository := repoRepo.New(database)
 	codeRepository := codeRepo.New(database)
 
 	// Integrations
-	githubIntegration := github.New(&cfg.Github)
+	githubIntegration := github.New(&cfg.Github, redisClient)
 
 	// Notifications
 	notificationService := notifications.New(

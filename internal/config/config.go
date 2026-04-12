@@ -2,6 +2,7 @@ package config
 
 type Config struct {
 	Database    Database    `mapstructure:"DB" json:"DB" yaml:"DB"`
+	Redis       Redis       `mapstructure:"REDIS" json:"REDIS" yaml:"REDIS"`
 	Application Application `mapstructure:"SERVER" json:"SERVER" yaml:"SERVER"`
 	Github      Github      `mapstructure:"GITHUB" json:"GITHUB" yaml:"GITHUB"`
 	Mailer      Mailer      `mapstructure:"MAILER" json:"MAILER" yaml:"MAILER"`
@@ -28,6 +29,12 @@ type Mailer struct {
 	From     string `mapstructure:"FROM" yaml:"FROM"`
 	SMTP     string `mapstructure:"SMTP" yaml:"SMTP"`
 	Password string `mapstructure:"PASSWORD" yaml:"PASSWORD"`
+}
+
+type Redis struct {
+	Address  string `mapstructure:"ADDRESS" json:"ADDRESS" yaml:"ADDRESS" default:"localhost:6379"`
+	Password string `mapstructure:"PASSWORD" json:"PASSWORD" yaml:"PASSWORD"`
+	DB       int    `mapstructure:"DB" json:"DB" yaml:"DB" default:"0"`
 }
 
 type Cron struct {

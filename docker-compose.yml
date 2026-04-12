@@ -1,11 +1,30 @@
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   github-subscriptions:
     name: subscriptions
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    expose:
+      - '6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      github-subscriptions:
+        aliases:
+          - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
   postgres:
     image: postgres:16.3-alpine
     ports:
@@ -36,6 +55,8 @@ services:
       - ./.env
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       github-subscriptions:
