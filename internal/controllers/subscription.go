@@ -1,10 +1,7 @@
 package controllers
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
-	"net/url"
 	"se-school/internal/models/dto"
 	"se-school/internal/services/subscription"
 
@@ -45,29 +42,8 @@ func NewSubscriptionController(
 func (sc *SubscriptionController) Subscribe(c *gin.Context) {
 	var req dto.CreateSubscriptionRequest
 
-	// Read the raw body so we can attempt multiple parse strategies.
-	body, err := io.ReadAll(c.Request.Body)
+	err := c.ShouldBind(&req)
 	if err != nil {
-		zap.L().Warn("failed to read request body", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
-
-	// Try JSON first.
-	if json.Unmarshal(body, &req) != nil || req.Email == "" || req.Repo == "" {
-		// Reset and try form-urlencoded parsing.
-		req = dto.CreateSubscriptionRequest{}
-		values, parseErr := url.ParseQuery(string(body))
-		if parseErr != nil {
-			zap.L().Warn("invalid subscribe request: cannot parse body")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-			return
-		}
-		req.Email = values.Get("email")
-		req.Repo = values.Get("repo")
-	}
-
-	if req.Email == "" || req.Repo == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}

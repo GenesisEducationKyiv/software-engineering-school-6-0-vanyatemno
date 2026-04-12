@@ -24,7 +24,12 @@ func (s *Service) Create(
 	}
 	err = s.sendConfirmationCode(sub)
 	if err != nil {
-		zap.L().Error("failed to init new subscription", zap.Error(err))
+		zap.L().Error("failed to send confirmation code", zap.Error(err))
+		deleteError := s.subscriptionsRepository.Delete(sub)
+		if deleteError != nil {
+			zap.L().Error("failed to rollback subscription create", zap.Error(deleteError))
+			return deleteError
+		}
 		return err
 	}
 
