@@ -18,10 +18,8 @@ services:
       github-subscriptions:
         aliases:
           - postgres
-    env_file:
-      - deploy/postgres/.env.postgres
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 1s
       timeout: 1s
       retries: 20
