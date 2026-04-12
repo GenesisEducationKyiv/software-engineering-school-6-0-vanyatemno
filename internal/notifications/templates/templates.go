@@ -28,6 +28,7 @@ func New() *Service {
 }
 
 func (s *Service) RenderTemplate(name TemplateName, payload any) (*RenderedTemplate, error) {
+	// todo: add payload type validation
 	bodyBuffer, err := s.renderTemplateBody(name, payload)
 	if err != nil {
 		return nil, err

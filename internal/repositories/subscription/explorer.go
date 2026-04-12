@@ -15,9 +15,12 @@ func (r *Repository) GetByID(id uint) (*models.Subscription, error) {
 	return &subscription, nil
 }
 
-func (r *Repository) GetByRepositoryID(repositoryID uint) ([]*models.Subscription, error) {
+func (r *Repository) GetUnupdated(repositoryID uint, currentTag string) ([]*models.Subscription, error) {
 	var subscriptions []*models.Subscription
-	err := r.db.Where("repository_id = ?", repositoryID).Find(&subscriptions).Error
+	err := r.db.
+		Where("repository_id = ? AND last_seen_tag = ?", repositoryID, currentTag).
+		Find(&subscriptions).
+		Error
 	if err != nil {
 		return nil, err
 	}

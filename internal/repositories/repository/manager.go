@@ -12,6 +12,7 @@ func (r *Repository) UpdateTag(id uint, tag string) (*models.Repository, error) 
 		return nil, err
 	}
 	repository.Version = tag
+	// todo: rewrite to lighter implementation
 
 	return repository, r.db.Save(repository).Error
 }

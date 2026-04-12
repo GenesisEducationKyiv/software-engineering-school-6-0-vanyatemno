@@ -7,6 +7,5 @@ type Repository struct {
 
 	Owner   string `gorm:"index:idx_repository"`
 	Name    string `gorm:"index:idx_repository"`
-	Path    string `gorm:"type:text;not null" json:"name"`
 	Version string `gorm:"type:text;not null" json:"version"`
 }
