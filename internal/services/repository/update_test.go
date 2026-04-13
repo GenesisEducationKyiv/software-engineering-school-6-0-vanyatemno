@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"se-school/internal/config"
 	"testing"
 
 	"se-school/internal/integrations/github"
@@ -31,7 +32,7 @@ func newTestService(
 	notifMock := notifications.NewNotificationsServiceMock()
 	githubMock := github.NewGithubIntegrationMock(githubVersion)
 
-	svc := New(repoMock, subMock, notifMock, githubMock)
+	svc := New(&config.Config{}, repoMock, subMock, notifMock, githubMock)
 	return svc, repoMock, subMock, notifMock, githubMock
 }
 

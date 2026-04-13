@@ -1,5 +1,3 @@
-{{/* release_email.html — Go html/template compatible */}}
-{{/* Data fields: .RepoLink, .Name, .Owner, .Version */}}
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
         "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
@@ -191,8 +189,7 @@
                             <a href="https://github.com/{{.Owner}}/{{.Name}}" target="_blank"
                                style="color:#57606a;">{{.Owner}}/{{.Name}}</a>.
                             <br/>
-<!--                            todo: add link to frontend with unsub code -->
-                            <a href="#" style="color:#57606a;">Unsubscribe</a>
+                            <a href="{{.UnsubscribeURL}}" style="color:#57606a;">Unsubscribe</a>
                         </p>
                     </td>
                 </tr>

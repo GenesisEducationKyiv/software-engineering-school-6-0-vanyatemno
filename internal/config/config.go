@@ -7,6 +7,7 @@ type Config struct {
 	Github      Github      `mapstructure:"GITHUB" json:"GITHUB" yaml:"GITHUB"`
 	Mailer      Mailer      `mapstructure:"MAILER" json:"MAILER" yaml:"MAILER"`
 	Cron        Cron        `mapstructure:"CRON" json:"CRON" yaml:"CRON"`
+	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
 }
 
 type Database struct {

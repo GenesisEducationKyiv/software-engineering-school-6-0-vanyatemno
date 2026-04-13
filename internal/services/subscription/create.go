@@ -130,9 +130,8 @@ func (s *Service) sendConfirmationCode(sub *models.Subscription) error {
 	err := s.notificationService.SendEmail(
 		[]string{sub.Email},
 		templates.Confirmation,
-		templates.ConfirmEmailPayload{
-			Code: sub.SubscribeCode.Code,
-		})
+		templates.BuildConfirmEmailPayload(s.cfg, sub.SubscribeCode.Code),
+	)
 	if err != nil {
 		return err
 	}

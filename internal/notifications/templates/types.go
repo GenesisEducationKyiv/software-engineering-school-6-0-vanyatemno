@@ -13,9 +13,10 @@ type ConfirmEmailPayload struct {
 }
 
 type RepositoryUpdateEmailPayload struct {
-	Name    string
-	Owner   string
-	Version string
+	Name           string
+	Owner          string
+	Version        string
+	UnsubscribeURL string
 }
 
 type RenderedTemplate struct {

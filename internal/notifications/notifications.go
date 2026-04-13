@@ -5,8 +5,6 @@ import (
 	"se-school/internal/notifications/templates"
 )
 
-// todo: tests
-
 type Service struct {
 	mailer           mailer.Mailer
 	templatesService templates.TemplateService

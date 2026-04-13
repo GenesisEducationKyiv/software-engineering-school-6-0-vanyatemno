@@ -1,6 +1,7 @@
 package subscription
 
 import (
+	"se-school/internal/config"
 	"se-school/internal/integrations/github"
 	"se-school/internal/notifications"
 	"se-school/internal/repositories/code"
@@ -9,6 +10,7 @@ import (
 )
 
 type Service struct {
+	cfg                     *config.Config
 	subscriptionsRepository subscription.SubscriptionsRepository
 	repositoriesRepository  repository.RepositoriesRepository
 	codesRepository         code.CodesRepository
@@ -17,6 +19,7 @@ type Service struct {
 }
 
 func New(
+	cfg *config.Config,
 	subscriptionsRepository subscription.SubscriptionsRepository,
 	repositoriesRepository repository.RepositoriesRepository,
 	codesRepository code.CodesRepository,
@@ -24,6 +27,7 @@ func New(
 	notificationService notifications.NotificationsService,
 ) *Service {
 	return &Service{
+		cfg:                     cfg,
 		subscriptionsRepository: subscriptionsRepository,
 		repositoriesRepository:  repositoriesRepository,
 		codesRepository:         codesRepository,

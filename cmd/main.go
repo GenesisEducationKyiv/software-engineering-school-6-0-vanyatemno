@@ -76,6 +76,7 @@ func main() {
 
 	// Services
 	subscriptionService := subscriptionSvc.New(
+		cfg,
 		subscriptionRepository,
 		repositoryRepository,
 		codeRepository,
@@ -84,6 +85,7 @@ func main() {
 	)
 
 	repositoryService := repositorySvc.New(
+		cfg,
 		repositoryRepository,
 		subscriptionRepository,
 		notificationService,
