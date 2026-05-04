@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: lint
+      run: make lint
+    - name: swagger docs update
+      run: make swagger && git add docs/*
