@@ -1,5 +1,5 @@
 # This file configures github.com/golangci/golangci-lint.
-version: '2'
+version: "2"
 run:
   tests: true
 linters:
@@ -20,6 +20,7 @@ linters:
     - unused
     - usetesting
     - whitespace
+    - nilnil
     ### linters we tried and will not be using:
     ###
     # - structcheck # lots of false positives
@@ -44,7 +45,7 @@ linters:
           severity: warning
           disabled: false
           exclude:
-            - ''
+            - ""
   exclusions:
     generated: lax
     presets:
@@ -69,13 +70,13 @@ linters:
       - path: core/vm/contracts.go
         text: 'SA1019: "golang.org/x/crypto/ripemd160" is deprecated: RIPEMD-160 is a legacy hash and should not be used for new applications.'
       - path: (.+)\.go$
-        text: 'SA1019: event.TypeMux is deprecated: use Feed'
+        text: "SA1019: event.TypeMux is deprecated: use Feed"
       - path: (.+)\.go$
-        text: 'SA1019: strings.Title is deprecated'
+        text: "SA1019: strings.Title is deprecated"
       - path: (.+)\.go$
-        text: 'SA1019: strings.Title has been deprecated since Go 1.18 and an alternative has been available since Go 1.0: The rule Title uses for word boundaries does not handle Unicode punctuation properly. Use golang.org/x/text/cases instead.'
+        text: "SA1019: strings.Title has been deprecated since Go 1.18 and an alternative has been available since Go 1.0: The rule Title uses for word boundaries does not handle Unicode punctuation properly. Use golang.org/x/text/cases instead."
       - path: (.+)\.go$
-        text: 'SA1029: should not use built-in type string as key for value'
+        text: "SA1029: should not use built-in type string as key for value"
     paths:
       - core/genesis_alloc.go
       - third_party$
