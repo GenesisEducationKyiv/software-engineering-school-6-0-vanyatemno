@@ -239,17 +239,20 @@ Centralised mapping from domain errors to HTTP status codes. All errors are retu
 
 **Layered architecture:**
 
-```
-HTTP Handler (controllers/)
-    │  validates input, calls service, writes response
-    ▼
-Service (services/)
-    │  business logic, orchestrates calls to repositories and integrations
-    ▼
-Repository (repositories/)         Integration (integrations/github/)
-    │  SQL via GORM                    │  GitHub REST API via go-github
-    ▼                                  ▼
-PostgreSQL                          Redis (cache layer inside integration)
+```mermaid
+flowchart TD
+    A["HTTP Handler\n(controllers/)"]
+    B["Service\n(services/)"]
+    C["Repository\n(repositories/)"]
+    D["Integration\n(integrations/github/)"]
+    E[("PostgreSQL")]
+    F[("Redis")]
+
+    A -- "validates input, calls service,\nwrites response" --> B
+    B -- "business logic, orchestrates\ncalls to repositories and integrations" --> C
+    B --> D
+    C -- "SQL via GORM" --> E
+    D -- "GitHub REST API\nvia go-github" --> F
 ```
 
 **Prometheus metrics exposed:**
