@@ -182,12 +182,12 @@ graph TD
 
 **Middleware stack (applied globally):**
 
-```
-Request
-  └── CORS Middleware          — adds CORS headers
-  └── API Key Middleware        — validates X-API-Key; returns 401 on mismatch
-  └── Prometheus Middleware     — increments in-flight gauge; records duration & status on response
-  └── Route Handler
+```mermaid
+flowchart LR
+    R["Request"] --> CORS["CORS Middleware\nadds CORS headers"]
+    CORS --> AK["API Key Middleware\nvalidates X-API-Key\n401 on mismatch"]
+    AK --> PM["Prometheus Middleware\nrecords duration & status"]
+    PM --> H["Route Handler"]
 ```
 
 **Route table:**
@@ -203,34 +203,36 @@ Request
 
 **Subscribe flow (`POST /api/subscribe`):**
 
-```
-1. Parse & validate form fields: email, repo (must match "owner/repo")
-2. Query GitHub API → confirm repo exists (cached)
-3. Look up or create Repository record in PostgreSQL
-4. Check for existing active subscription (email + repo_id) → 409 if found
-5. Generate UUID confirmation token, persist as Code record (type=confirmation)
-6. Generate UUID unsubscribe token, persist as Code record (type=unsubscribe)
-7. Create Subscription record (IsConfirmed=false, linked to both codes)
-8. Send confirmation email with token link
-9. Return 200 OK
+```mermaid
+flowchart TD
+    A["Parse & validate form fields\nemail, repo"] --> B["Query GitHub API\nconfirm repo exists (cached)"]
+    B --> C["Look up or create\nRepository in PostgreSQL"]
+    C --> D{"Active subscription\nalready exists?"}
+    D -- "Yes" --> E["Return 409 Conflict"]
+    D -- "No" --> F["Generate UUID confirmation token\npersist as Code (type=confirmation)"]
+    F --> G["Generate UUID unsubscribe token\npersist as Code (type=unsubscribe)"]
+    G --> H["Create Subscription\nIsConfirmed=false"]
+    H --> I["Send confirmation email"]
+    I --> J["Return 200 OK"]
 ```
 
 **Confirm flow (`GET /api/confirm/:token`):**
 
-```
-1. Look up Code by token where type=confirmation
-2. Validate token not expired and not already used
-3. Set Subscription.IsConfirmed = true
-4. Return 200 OK
+```mermaid
+flowchart TD
+    A["Look up Code by token\ntype=confirmation"] --> B{"Valid &\nnot expired?"}
+    B -- "No" --> C["Return 400"]
+    B -- "Yes" --> D["Set Subscription.IsConfirmed = true"]
+    D --> E["Return 200 OK"]
 ```
 
 **Unsubscribe flow (`GET /api/unsubscribe/:token`):**
 
-```
-1. Look up Code by token where type=unsubscribe
-2. Find linked Subscription
-3. Soft-delete Subscription record (sets DeletedAt)
-4. Return 200 OK
+```mermaid
+flowchart TD
+    A["Look up Code by token\ntype=unsubscribe"] --> B["Find linked Subscription"]
+    B --> C["Soft-delete Subscription\nsets DeletedAt"]
+    C --> D["Return 200 OK"]
 ```
 
 **Error handling (`internal/controllers/errors.go`):**
@@ -273,16 +275,17 @@ flowchart TD
 
 **Key operation — `GetLatestRelease(ctx, owner, repo string) (string, error)`:**
 
-```
-1. Check Redis cache key "github:repo_version:{owner}/{repo}"
-   └── Cache HIT  → return cached tag, skip GitHub call
-   └── Cache MISS → proceed to GitHub API call
-
-2. Call GitHub Repositories API: GET /repos/{owner}/{repo}/releases/latest
-   └── On success    → extract tag_name, write to Redis (TTL=10 min), return tag
-   └── On rate limit → extract X-RateLimit-Reset header, sleep until reset, retry once
-   └── On 404        → return "repository not found" error
-   └── On other error → return wrapped error
+```mermaid
+flowchart TD
+    A["Check Redis cache\ngithub:repo_version:{owner}/{repo}"] --> B{"Cache hit?"}
+    B -- "Yes" --> C["Return cached tag"]
+    B -- "No" --> D["GET /repos/{owner}/{repo}/releases/latest"]
+    D --> E{"Response"}
+    E -- "200 OK" --> F["Write to Redis (TTL 10m)\nReturn tag"]
+    E -- "Rate limit" --> G["Sleep until\nX-RateLimit-Reset\nRetry"]
+    G --> D
+    E -- "404" --> H["Return 'repository not found'"]
+    E -- "Other error" --> I["Return wrapped error"]
 ```
 
 **Caching strategy:**
