@@ -194,35 +194,58 @@ graph TD
 **Subscribe flow (`POST /api/subscribe`):**
 
 ```mermaid
-flowchart TD
-    A["Parse & validate form fields\nemail, repo"] --> B["Query GitHub API\nconfirm repo exists (cached)"]
-    B --> C["Look up or create\nRepository in PostgreSQL"]
-    C --> D{"Active subscription\nalready exists?"}
-    D -- "Yes" --> E["Return 409 Conflict"]
-    D -- "No" --> F["Generate UUID confirmation token\npersist as Code (type=confirmation)"]
-    F --> G["Generate UUID unsubscribe token\npersist as Code (type=unsubscribe)"]
-    G --> H["Create Subscription\nIsConfirmed=false"]
-    H --> I["Send confirmation email"]
-    I --> J["Return 200 OK"]
+sequenceDiagram
+    participant Client
+    participant API
+    participant GH as GitHub API
+    participant DB as PostgreSQL
+    participant Mail as SMTP
+
+    Client->>API: POST /api/subscribe (email, repo)
+    API->>GH: Validate repo exists (cached)
+    GH-->>API: OK / not found
+    API->>DB: Look up or create Repository
+    API->>DB: Check for existing active subscription
+    alt already subscribed
+        API-->>Client: 409 Conflict
+    else
+        API->>DB: Create Code (confirmation) + Code (unsubscribe)
+        API->>DB: Create Subscription (IsConfirmed=false)
+        API->>Mail: Send confirmation email
+        API-->>Client: 200 OK
+    end
 ```
 
 **Confirm flow (`GET /api/confirm/:token`):**
 
 ```mermaid
-flowchart TD
-    A["Look up Code by token\ntype=confirmation"] --> B{"Valid &\nnot expired?"}
-    B -- "No" --> C["Return 400"]
-    B -- "Yes" --> D["Set Subscription.IsConfirmed = true"]
-    D --> E["Return 200 OK"]
+sequenceDiagram
+    participant Client
+    participant API
+    participant DB as PostgreSQL
+
+    Client->>API: GET /api/confirm/{token}
+    API->>DB: Look up Code (type=confirmation)
+    alt invalid or expired
+        API-->>Client: 400 Bad Request
+    else
+        API->>DB: Set Subscription.IsConfirmed = true
+        API-->>Client: 200 OK
+    end
 ```
 
 **Unsubscribe flow (`GET /api/unsubscribe/:token`):**
 
 ```mermaid
-flowchart TD
-    A["Look up Code by token\ntype=unsubscribe"] --> B["Find linked Subscription"]
-    B --> C["Soft-delete Subscription\nsets DeletedAt"]
-    C --> D["Return 200 OK"]
+sequenceDiagram
+    participant Client
+    participant API
+    participant DB as PostgreSQL
+
+    Client->>API: GET /api/unsubscribe/{token}
+    API->>DB: Look up Code (type=unsubscribe)
+    API->>DB: Soft-delete Subscription (sets DeletedAt)
+    API-->>Client: 200 OK
 ```
 
 **Error handling (`internal/controllers/errors.go`):**
@@ -266,16 +289,29 @@ flowchart TD
 **Key operation — `GetLatestRelease(ctx, owner, repo string) (string, error)`:**
 
 ```mermaid
-flowchart TD
-    A["Check Redis cache\ngithub:repo_version:{owner}/{repo}"] --> B{"Cache hit?"}
-    B -- "Yes" --> C["Return cached tag"]
-    B -- "No" --> D["GET /repos/{owner}/{repo}/releases/latest"]
-    D --> E{"Response"}
-    E -- "200 OK" --> F["Write to Redis (TTL 10m)\nReturn tag"]
-    E -- "Rate limit" --> G["Sleep until\nX-RateLimit-Reset\nRetry"]
-    G --> D
-    E -- "404" --> H["Return 'repository not found'"]
-    E -- "Other error" --> I["Return wrapped error"]
+sequenceDiagram
+    participant Caller
+    participant Cache as Redis
+    participant GH as GitHub API
+
+    Caller->>Cache: GET github:repo_version:{owner}/{repo}
+    alt cache hit
+        Cache-->>Caller: cached tag
+    else cache miss
+        Caller->>GH: GET /repos/{owner}/{repo}/releases/latest
+        alt 200 OK
+            GH-->>Caller: latest tag
+            Caller->>Cache: SET key = tag (TTL 10m)
+        else rate limited
+            GH-->>Caller: 403 RateLimitError
+            Caller->>Caller: sleep until X-RateLimit-Reset
+            Caller->>GH: retry request
+            GH-->>Caller: latest tag
+            Caller->>Cache: SET key = tag (TTL 10m)
+        else 404
+            GH-->>Caller: repository not found error
+        end
+    end
 ```
 
 **Caching strategy:**
