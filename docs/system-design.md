@@ -180,16 +180,6 @@ graph TD
 7. Start cron scheduler.
 8. Listen on `SERVER_PORT` (default `8080`).
 
-**Middleware stack (applied globally):**
-
-```mermaid
-flowchart LR
-    R["Request"] --> CORS["CORS Middleware\nadds CORS headers"]
-    CORS --> AK["API Key Middleware\nvalidates X-API-Key\n401 on mismatch"]
-    AK --> PM["Prometheus Middleware\nrecords duration & status"]
-    PM --> H["Route Handler"]
-```
-
 **Route table:**
 
 | Method | Path | Handler | Description |
