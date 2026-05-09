@@ -22,6 +22,7 @@ We have to choose the database to store:
 ---
 
 ## Chosen database: `PostgreSQL`
+The data model is relational by nature — subscriptions belong to repositories and reference token codes — so a relational database is a natural fit. PostgreSQL's ACID guarantees prevent duplicate subscriptions under concurrent requests, and partial unique indexes allow clean re-subscription after unsubscribe.
 
 ### Database schema
 ```mermaid

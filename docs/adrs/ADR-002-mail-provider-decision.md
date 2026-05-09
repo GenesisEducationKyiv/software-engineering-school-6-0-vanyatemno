@@ -21,6 +21,7 @@ We have to choose the mail provider to:
 ---
 
 ## Chosen provider: `go-gomail` (Local SMTP)
+At the current scale, email volume is low and delivery analytics are not required. A direct SMTP integration covers all needs without introducing a paid external service or vendor lock-in.
 
 ## Consequences
 ### Positive

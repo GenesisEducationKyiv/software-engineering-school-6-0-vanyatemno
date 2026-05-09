@@ -21,6 +21,7 @@ We have to integrate with GitHub API to:
 ---
 
 ## Chosen integration: `google/go-github v84`
+The SDK eliminates boilerplate for JSON parsing and provides typed error types that make rate-limit handling straightforward. Maintenance of API contract changes is delegated to the SDK authors rather than owned by this project.
 
 ## Consequences
 ### Positive
