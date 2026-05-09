@@ -15,26 +15,24 @@
 
 ### b. Non-Functional Requirements
 
-| Property | Requirement |
-|---|---|
-| **Availability** | 99.5% uptime (single-instance deployment) |
-| **Latency** | API responses under 500 ms for subscribe/confirm/unsubscribe; GitHub polling may take longer |
-| **Scalability** | Supports thousands of repositories and tens of thousands of subscribers |
-| **Reliability** | No lost notifications — all errors are logged; failed jobs do not block subsequent runs |
-| **Security** | API key authentication; tokens are unique and non-guessable (UUID v4); soft-delete prevents data loss |
-| **Observability** | Prometheus metrics for HTTP requests (count, latency, in-flight); structured logging via zap |
-| **Maintainability** | Clean layered architecture (handlers → services → repositories); interface-based design for testability |
-| **Documentation** | OpenAPI 2.0 (Swagger) spec; interactive UI at `/swagger/index.html` |
-| **Portability** | Fully containerized via Docker; single `docker-compose up` starts the entire stack |
+1. **Availability** — 99.5% uptime (single-instance deployment).
+2. **Latency** — API responses under 500 ms for subscribe/confirm/unsubscribe; GitHub polling may take longer.
+3. **Scalability** — Supports thousands of repositories and tens of thousands of subscribers.
+4. **Reliability** — No lost notifications — all errors are logged; failed jobs do not block subsequent runs.
+5. **Security** — API key authentication; tokens are unique and non-guessable (UUID v4); soft-delete prevents data loss.
+6. **Observability** — Prometheus metrics for HTTP requests (count, latency, in-flight); structured logging via zap.
+7. **Maintainability** — Clean layered architecture (handlers → services → repositories); interface-based design for testability.
+8. **Documentation** — OpenAPI 2.0 (Swagger) spec; interactive UI at `/swagger/index.html`.
+9. **Portability** — Fully containerized via Docker; single `docker-compose up` starts the entire stack.
 
 ### c. Constraints
 
-- **GitHub API Rate Limits** — Unauthenticated requests are limited to 60/hour; an authenticated personal access token raises this to 5,000/hour. The polling interval must be configured accordingly.
-- **SMTP Dependency** — Email delivery relies on a third-party SMTP server; no fallback mechanism is implemented.
-- **Single Instance** — The application runs as a single container with one cron worker; horizontal scaling is not supported without introducing distributed locking.
-- **Public Repositories Only** — The `public_repo` GitHub token scope gives access to public repositories only.
-- **Static API Key** — There is no user identity system or token rotation; the key is shared across all API consumers.
-- **No Retry Queue** — Failed email deliveries are logged but not retried automatically.
+1. **GitHub API Rate Limits** — Unauthenticated requests are limited to 60/hour; an authenticated personal access token raises this to 5,000/hour. The polling interval must be configured accordingly.
+2. **SMTP Dependency** — Email delivery relies on a third-party SMTP server; no fallback mechanism is implemented.
+3. **Single Instance** — The application runs as a single container with one cron worker; horizontal scaling is not supported without introducing distributed locking.
+4. **Public Repositories Only** — The `public_repo` GitHub token scope gives access to public repositories only.
+5. **Static API Key** — There is no user identity system or token rotation; the key is shared across all API consumers.
+6. **No Retry Queue** — Failed email deliveries are logged but not retried automatically.
 
 ---
 
