@@ -381,11 +381,10 @@ func TestUnsubscribe_DeleteError_ReturnsError(t *testing.T) {
 func TestListByEmail_ReturnsSubscriptions(t *testing.T) {
 	td := setupTest()
 
-	expected := []*models.Subscription{
+	td.subs.GetByEmailResult = []*models.Subscription{
 		{Model: gorm.Model{ID: 1}, Email: "user@example.com"},
 		{Model: gorm.Model{ID: 2}, Email: "user@example.com"},
 	}
-	td.subs.GetByEmailResult = expected
 
 	req := &dto.GetSubscriptionsRequest{Email: "user@example.com"}
 
@@ -395,6 +394,46 @@ func TestListByEmail_ReturnsSubscriptions(t *testing.T) {
 	}
 	if len(result) != 2 {
 		t.Fatalf("expected 2 subscriptions, got %d", len(result))
+	}
+}
+
+func TestListByEmail_MapsRepositoryField(t *testing.T) {
+	td := setupTest()
+
+	td.subs.GetByEmailResult = []*models.Subscription{
+		{
+			Model: gorm.Model{ID: 1},
+			Email: "user@example.com",
+			Repository: &models.Repository{
+				Owner: "golang",
+				Name:  "go",
+			},
+			IsConfirmed: true,
+			LastSeenTag: "v1.22.0",
+		},
+		{
+			Model: gorm.Model{ID: 2},
+			Email: "user@example.com",
+		},
+	}
+
+	req := &dto.GetSubscriptionsRequest{Email: "user@example.com"}
+
+	result, err := td.svc.ListByEmail(req)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result[0].Repo != "golang/go" {
+		t.Fatalf("expected repo %q, got %q", "golang/go", result[0].Repo)
+	}
+	if !result[0].Confirmed {
+		t.Fatal("expected first subscription to be confirmed")
+	}
+	if result[0].LastSeenTag != "v1.22.0" {
+		t.Fatalf("expected last_seen_tag %q, got %q", "v1.22.0", result[0].LastSeenTag)
+	}
+	if result[1].Repo != "" {
+		t.Fatalf("expected empty repo for nil Repository, got %q", result[1].Repo)
 	}
 }
 

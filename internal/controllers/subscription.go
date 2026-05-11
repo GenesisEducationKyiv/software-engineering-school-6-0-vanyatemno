@@ -140,19 +140,5 @@ func (sc *SubscriptionController) GetSubscriptions(c *gin.Context) {
 		return
 	}
 
-	response := make([]dto.SubscriptionResponse, 0, len(subscriptions))
-	for _, sub := range subscriptions {
-		repo := ""
-		if sub.Repository != nil {
-			repo = sub.Repository.Owner + "/" + sub.Repository.Name
-		}
-		response = append(response, dto.SubscriptionResponse{
-			Email:       sub.Email,
-			Repo:        repo,
-			Confirmed:   sub.IsConfirmed,
-			LastSeenTag: sub.LastSeenTag,
-		})
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, subscriptions)
 }
