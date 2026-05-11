@@ -3,19 +3,18 @@ package controllers
 import (
 	"net/http"
 	"se-school/internal/models/dto"
-	"se-school/internal/services/subscription"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type SubscriptionController struct {
-	subscriptionService subscription.SubscriptionsService
+	subscriptionService SubscriptionsService
 }
 
 // NewSubscriptionController creates a new SubscriptionController backed by the given service.
 func NewSubscriptionController(
-	subscriptionService subscription.SubscriptionsService,
+	subscriptionService SubscriptionsService,
 ) *SubscriptionController {
 	return &SubscriptionController{
 		subscriptionService: subscriptionService,
