@@ -20,11 +20,11 @@ type Service struct {
 
 func New(
 	cfg *config.Config,
-	subscriptionsRepository subscription.SubscriptionsRepository,
-	repositoriesRepository repository.RepositoriesRepository,
-	codesRepository code.CodesRepository,
-	githubIntegration github.GithubIntegration,
-	notificationService notifications.NotificationsService,
+	subscriptionsRepository SubscriptionsRepository,
+	repositoriesRepository RepositoriesRepository,
+	codesRepository CodesRepository,
+	githubIntegration GithubIntegration,
+	notificationService NotificationsService,
 ) *Service {
 	return &Service{
 		cfg:                     cfg,
