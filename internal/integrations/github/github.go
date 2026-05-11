@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"se-school/internal/config"
+	"se-school/internal/models"
 	"time"
 
 	"github.com/google/go-github/v84/github"
@@ -78,6 +80,9 @@ func (g *GithubService) fetchRepositoryVersion(ctx context.Context, owner, repos
 			case <-ctx.Done():
 				return "", ctx.Err()
 			}
+		}
+		if ghErr, ok := errors.AsType[*github.ErrorResponse](err); ok && ghErr.Response.StatusCode == http.StatusNotFound {
+			return "", models.ErrRepositoryNotFound
 		}
 		zap.L().Error("failed to get repository version", zap.Error(err))
 		return "", err

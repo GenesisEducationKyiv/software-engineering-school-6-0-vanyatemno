@@ -1,6 +1,7 @@
 package code
 
 import (
+	"errors"
 	"se-school/internal/models"
 
 	"gorm.io/gorm"
@@ -19,6 +20,9 @@ func New(db *gorm.DB) *Repository {
 func (r *Repository) Get(codeString string) (*models.Code, error) {
 	var code models.Code
 	err := r.db.Where(&models.Code{Code: codeString}).First(&code).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, models.ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
