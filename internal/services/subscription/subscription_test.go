@@ -3,7 +3,6 @@ package subscription
 import (
 	"context"
 	"errors"
-	"se-school/internal/config"
 	"testing"
 
 	"se-school/internal/integrations/github"
@@ -34,7 +33,7 @@ func setupTest() *testDeps {
 	gh := github.NewGithubIntegrationMock("v1.0.0")
 	notif := notifications.NewNotificationsServiceMock()
 
-	svc := New(&config.Config{}, subs, repos, codes, gh, notif)
+	svc := New("", subs, repos, codes, gh, notif)
 
 	return &testDeps{
 		svc:      svc,
