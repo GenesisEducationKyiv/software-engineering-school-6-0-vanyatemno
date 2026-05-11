@@ -26,24 +26,8 @@ func (r *Repository) Get(codeString string) (*models.Code, error) {
 	return &code, nil
 }
 
-func (r *Repository) Create(
-	codeType models.CodeType,
-) (*models.Code, error) {
-	code := models.Code{
-		Code: "",
-		Type: codeType,
-	}
-	err := r.setupCode(&code)
-	if err != nil {
-		return nil, err
-	}
-
-	err = r.db.Create(&code).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return &code, nil
+func (r *Repository) Create(code *models.Code) error {
+	return r.db.Create(code).Error
 }
 
 func (r *Repository) Delete(id uint) error {

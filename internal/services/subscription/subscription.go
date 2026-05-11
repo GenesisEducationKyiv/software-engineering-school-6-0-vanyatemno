@@ -5,6 +5,7 @@ type Service struct {
 	subscriptionsRepository SubscriptionsRepository
 	repositoriesRepository  RepositoriesRepository
 	codesRepository         CodesRepository
+	codeFactory             CodeFactory
 	githubIntegration       GithubIntegration
 	notificationService     NotificationsService
 }
@@ -14,6 +15,7 @@ func New(
 	subscriptionsRepository SubscriptionsRepository,
 	repositoriesRepository RepositoriesRepository,
 	codesRepository CodesRepository,
+	codeFactory CodeFactory,
 	githubIntegration GithubIntegration,
 	notificationService NotificationsService,
 ) *Service {
@@ -22,6 +24,7 @@ func New(
 		subscriptionsRepository: subscriptionsRepository,
 		repositoriesRepository:  repositoriesRepository,
 		codesRepository:         codesRepository,
+		codeFactory:             codeFactory,
 		githubIntegration:       githubIntegration,
 		notificationService:     notificationService,
 	}

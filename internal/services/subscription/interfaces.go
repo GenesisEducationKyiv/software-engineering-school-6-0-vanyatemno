@@ -16,8 +16,12 @@ type GithubIntegration interface {
 
 type CodesRepository interface {
 	Get(code string) (*models.Code, error)
-	Create(codeType models.CodeType) (*models.Code, error)
+	Create(code *models.Code) error
 	Delete(id uint) error
+}
+
+type CodeFactory interface {
+	New(codeType models.CodeType) (*models.Code, error)
 }
 
 type RepositoriesRepository interface {

@@ -51,12 +51,18 @@ func (s *Service) createNewSubscription(
 		return nil, err
 	}
 
-	unsubCode, err := s.codesRepository.Create(models.CodeTypeUnsubscribe)
+	unsubCode, err := s.codeFactory.New(models.CodeTypeUnsubscribe)
 	if err != nil {
 		return nil, err
 	}
-	subCode, err := s.codesRepository.Create(models.CodeTypeConfirm)
+	if err := s.codesRepository.Create(unsubCode); err != nil {
+		return nil, err
+	}
+	subCode, err := s.codeFactory.New(models.CodeTypeConfirm)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.codesRepository.Create(subCode); err != nil {
 		return nil, err
 	}
 
