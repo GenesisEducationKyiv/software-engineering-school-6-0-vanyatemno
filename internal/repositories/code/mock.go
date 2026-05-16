@@ -3,13 +3,12 @@ package code
 import "se-school/internal/models"
 
 type CodesRepositoryMock struct {
-	GetResult    *models.Code
-	GetErr       error
-	CreateResult *models.Code
-	CreateErr    error
-	DeleteErr    error
+	GetResult *models.Code
+	GetErr    error
+	CreateErr error
+	DeleteErr error
 
-	CreateCalls []models.CodeType
+	CreateCalls []*models.Code
 	DeleteCalls []uint
 }
 
@@ -21,15 +20,9 @@ func (m *CodesRepositoryMock) Get(_ string) (*models.Code, error) {
 	return m.GetResult, m.GetErr
 }
 
-func (m *CodesRepositoryMock) Create(codeType models.CodeType) (*models.Code, error) {
-	m.CreateCalls = append(m.CreateCalls, codeType)
-	if m.CreateErr != nil {
-		return nil, m.CreateErr
-	}
-	if m.CreateResult != nil {
-		return m.CreateResult, nil
-	}
-	return &models.Code{Type: codeType, Code: "mock-code"}, nil
+func (m *CodesRepositoryMock) Create(code *models.Code) error {
+	m.CreateCalls = append(m.CreateCalls, code)
+	return m.CreateErr
 }
 
 func (m *CodesRepositoryMock) Delete(id uint) error {

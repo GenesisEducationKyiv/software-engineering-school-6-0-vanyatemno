@@ -1,9 +1,16 @@
 package subscription
 
-import "se-school/internal/models"
+import (
+	"se-school/internal/infrastructure/db"
+	"se-school/internal/models"
+)
 
 func (r *Repository) Create(subscription *models.Subscription) error {
-	return r.db.Create(subscription).Error
+	err := r.db.Create(subscription).Error
+	if db.IsDuplicateKeyError(err) {
+		return models.ErrAlreadyExists
+	}
+	return err
 }
 
 func (r *Repository) UpdateLastSeenTag(id uint, tag string) error {

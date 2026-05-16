@@ -1,6 +1,11 @@
 package repository
 
+import (
+	"context"
+	"se-school/internal/models"
+)
+
 type RepositoriesService interface {
-	CheckRepoTagAndAlert(id uint) error
-	CheckAllReposTagAndAlert() error
+	CheckRepoTagAndAlert(ctx context.Context, repo *models.Repository) error
+	CheckAllReposTagAndAlert(ctx context.Context) error
 }

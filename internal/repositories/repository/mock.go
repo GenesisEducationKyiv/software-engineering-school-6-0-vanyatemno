@@ -2,8 +2,6 @@ package repository
 
 import (
 	"se-school/internal/models"
-
-	"gorm.io/gorm"
 )
 
 type RepositoriesRepositoryMock struct {
@@ -65,7 +63,7 @@ func (m *RepositoriesRepositoryMock) Find(repo *models.Repository) (*models.Repo
 	if m.FindErr != nil {
 		return nil, m.FindErr
 	}
-	return nil, gorm.ErrRecordNotFound
+	return nil, models.ErrNotFound
 }
 
 func (m *RepositoriesRepositoryMock) Create(repo *models.Repository) error {

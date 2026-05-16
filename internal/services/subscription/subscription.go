@@ -1,36 +1,30 @@
 package subscription
 
-import (
-	"se-school/internal/config"
-	"se-school/internal/integrations/github"
-	"se-school/internal/notifications"
-	"se-school/internal/repositories/code"
-	"se-school/internal/repositories/repository"
-	"se-school/internal/repositories/subscription"
-)
-
 type Service struct {
-	cfg                     *config.Config
-	subscriptionsRepository subscription.SubscriptionsRepository
-	repositoriesRepository  repository.RepositoriesRepository
-	codesRepository         code.CodesRepository
-	githubIntegration       github.GithubIntegration
-	notificationService     notifications.NotificationsService
+	frontendURL             string
+	subscriptionsRepository SubscriptionsRepository
+	repositoriesRepository  RepositoriesRepository
+	codesRepository         CodesRepository
+	codeFactory             CodeFactory
+	githubIntegration       GithubIntegration
+	notificationService     NotificationsService
 }
 
 func New(
-	cfg *config.Config,
-	subscriptionsRepository subscription.SubscriptionsRepository,
-	repositoriesRepository repository.RepositoriesRepository,
-	codesRepository code.CodesRepository,
-	githubIntegration github.GithubIntegration,
-	notificationService notifications.NotificationsService,
+	frontendURL string,
+	subscriptionsRepository SubscriptionsRepository,
+	repositoriesRepository RepositoriesRepository,
+	codesRepository CodesRepository,
+	codeFactory CodeFactory,
+	githubIntegration GithubIntegration,
+	notificationService NotificationsService,
 ) *Service {
 	return &Service{
-		cfg:                     cfg,
+		frontendURL:             frontendURL,
 		subscriptionsRepository: subscriptionsRepository,
 		repositoriesRepository:  repositoriesRepository,
 		codesRepository:         codesRepository,
+		codeFactory:             codeFactory,
 		githubIntegration:       githubIntegration,
 		notificationService:     notificationService,
 	}

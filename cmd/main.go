@@ -9,6 +9,7 @@ import (
 	"se-school/internal/infrastructure/db"
 	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
+	"se-school/internal/models/factories/codes"
 	"se-school/internal/notifications"
 	"se-school/internal/notifications/mailer"
 	"se-school/internal/notifications/templates"
@@ -65,6 +66,9 @@ func main() {
 	repositoryRepository := repoRepo.New(database)
 	codeRepository := codeRepo.New(database)
 
+	// Domain
+	codeFactory := codes.NewFactory()
+
 	// Integrations
 	githubIntegration := github.New(&cfg.Github, redisClient)
 
@@ -76,16 +80,17 @@ func main() {
 
 	// Services
 	subscriptionService := subscriptionSvc.New(
-		cfg,
+		cfg.FrontendURL,
 		subscriptionRepository,
 		repositoryRepository,
 		codeRepository,
+		codeFactory,
 		githubIntegration,
 		notificationService,
 	)
 
 	repositoryService := repositorySvc.New(
-		cfg,
+		cfg.FrontendURL,
 		repositoryRepository,
 		subscriptionRepository,
 		notificationService,

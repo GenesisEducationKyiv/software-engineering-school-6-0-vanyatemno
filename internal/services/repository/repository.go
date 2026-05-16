@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"se-school/internal/config"
 	"se-school/internal/integrations/github"
 	"se-school/internal/notifications"
 	"se-school/internal/repositories/repository"
@@ -9,7 +8,7 @@ import (
 )
 
 type Service struct {
-	cfg                     *config.Config
+	frontendURL             string
 	repositoriesRepository  repository.RepositoriesRepository
 	subscriptionsRepository subscription.SubscriptionsRepository
 	notificationsService    notifications.NotificationsService
@@ -17,14 +16,14 @@ type Service struct {
 }
 
 func New(
-	cfg *config.Config,
+	frontendURL string,
 	repositoriesRepository repository.RepositoriesRepository,
 	subscriptionsRepository subscription.SubscriptionsRepository,
 	notificationsService notifications.NotificationsService,
 	githubService github.GithubIntegration,
 ) *Service {
 	return &Service{
-		cfg:                     cfg,
+		frontendURL:             frontendURL,
 		repositoriesRepository:  repositoriesRepository,
 		subscriptionsRepository: subscriptionsRepository,
 		notificationsService:    notificationsService,

@@ -24,7 +24,7 @@ func RegisterRoutes(r *gin.Engine, sc *SubscriptionController, cfg *config.Appli
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	api := r.Group("/api", middlewares.APIKeyMiddleware(cfg.APIKey))
+	api := r.Group("/api", middlewares.ErrorHandlerMiddleware(), middlewares.APIKeyMiddleware(cfg.APIKey))
 	{
 		api.GET("/confirm/:token", sc.Confirm)
 		api.GET("/unsubscribe/:token", sc.Unsubscribe)
