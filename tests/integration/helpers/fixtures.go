@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"se-school/internal/models"
+
+	"github.com/google/uuid"
 )
 
 // SeedSubscription inserts a Repository, two Codes (confirm + unsubscribe)
@@ -23,12 +25,12 @@ func (s *Suite) SeedSubscription(
 	}
 
 	confirmCode := &models.Code{
-		Code:      "CONF" + randSuffix(),
+		Code:      "CONF-" + uuid.NewString(),
 		Type:      models.CodeTypeConfirm,
 		ExpiresAt: time.Now().Add(30 * time.Minute),
 	}
 	unsubCode := &models.Code{
-		Code:      "UNSUB-" + randSuffix(),
+		Code:      "UNSUB-" + uuid.NewString(),
 		Type:      models.CodeTypeUnsubscribe,
 		ExpiresAt: time.Now().Add(10 * 365 * 24 * time.Hour),
 	}
@@ -107,28 +109,3 @@ func (s *Suite) CodeExists(t *testing.T, id uint) bool {
 	return n > 0
 }
 
-var randCounter int64
-
-func randSuffix() string {
-	randCounter++
-	return time.Now().Format("150405.000000") + "-" + itoa(randCounter)
-}
-
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	buf := make([]byte, 0, 20)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	if neg {
-		buf = append([]byte{'-'}, buf...)
-	}
-	return string(buf)
-}

@@ -58,13 +58,22 @@ type Call struct {
 func NewMSWServer(t *testing.T) *MSWServer {
 	t.Helper()
 	m := &MSWServer{t: t}
-	m.unmatched = func(req Request) Response {
-		t.Errorf("msw: unmatched request %s %s", req.Method, req.Path)
-		return JSON(http.StatusNotImplemented, map[string]string{"error": "unmatched"})
-	}
+	m.unmatched = defaultUnmatched(t)
 	m.server = httptest.NewServer(http.HandlerFunc(m.serve))
 	t.Cleanup(m.server.Close)
 	return m
+}
+
+// defaultUnmatched records the unexpected request and replies 500 so the
+// caller sees a hard failure rather than silently observing a "200 with
+// empty body" response. When this fires, expect TWO failures in the test
+// output: the t.Errorf below (the cause) and whatever assertion the
+// caller had downstream. The first message is the cause.
+func defaultUnmatched(t *testing.T) func(Request) Response {
+	return func(req Request) Response {
+		t.Errorf("msw: unmatched request %s %s (cause; downstream assertions may also fail)", req.Method, req.Path)
+		return JSON(http.StatusInternalServerError, map[string]string{"error": "unmatched"})
+	}
 }
 
 func (m *MSWServer) URL() string { return m.server.URL + "/" }
@@ -91,10 +100,7 @@ func (m *MSWServer) Reset() {
 	defer m.mu.Unlock()
 	m.handlers = nil
 	m.calls = nil
-	m.unmatched = func(req Request) Response {
-		m.t.Errorf("msw: unmatched request %s %s", req.Method, req.Path)
-		return JSON(http.StatusNotImplemented, map[string]string{"error": "unmatched"})
-	}
+	m.unmatched = defaultUnmatched(m.t)
 }
 
 func (m *MSWServer) Calls() []Call {
