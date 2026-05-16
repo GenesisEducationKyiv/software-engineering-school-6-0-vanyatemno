@@ -1,0 +1,50 @@
+volumes:
+  postgres_test_data:
+  redis_test_data:
+
+networks:
+  github-subscriptions-test:
+    name: subscriptions-test
+
+services:
+  postgres-test:
+    image: postgres:16.3-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - github-subscriptions-test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  redis-test:
+    image: redis:7-alpine
+    volumes:
+      - redis_test_data:/data
+    networks:
+      - github-subscriptions-test
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  tests:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile.test
+    env_file:
+      - ./.env.test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - github-subscriptions-test

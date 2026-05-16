@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"se-school/internal/config"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v84/github"
@@ -24,6 +26,17 @@ type GithubService struct {
 
 func New(cfg *config.Github, cache *redis.Client) *GithubService {
 	client := github.NewClient(nil).WithAuthToken(cfg.Token)
+	if cfg.BaseURL != "" {
+		raw := cfg.BaseURL
+		if !strings.HasSuffix(raw, "/") {
+			raw += "/"
+		}
+		if u, err := url.Parse(raw); err == nil {
+			client.BaseURL = u
+		} else {
+			zap.L().Warn("invalid github base url, falling back to default", zap.Error(err))
+		}
+	}
 	return &GithubService{
 		client: client,
 		cache:  cache,

@@ -20,7 +20,8 @@ type Application struct {
 }
 
 type Github struct {
-	Token string `mapstructure:"TOKEN" json:"TOKEN" yaml:"TOKEN"`
+	Token   string `mapstructure:"TOKEN" json:"TOKEN" yaml:"TOKEN"`
+	BaseURL string `mapstructure:"BASE_URL" json:"BASE_URL" yaml:"BASE_URL"`
 }
 
 type Mailer struct {
