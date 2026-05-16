@@ -71,7 +71,10 @@ func NewSuite(t *testing.T) *Suite {
 	}
 
 	notifier := notifications.NewNotificationsServiceMock()
-	githubSvc := github.New(&cfg.Github, rdb)
+	githubSvc, err := github.New(&cfg.Github, rdb)
+	if err != nil {
+		t.Fatalf("github integration: %v", err)
+	}
 
 	subscriptionsRepo := subRepo.New(db)
 	repositoriesRepo := repoRepo.New(db)

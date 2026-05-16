@@ -66,7 +66,10 @@ func main() {
 	codeRepository := codeRepo.New(database)
 
 	// Integrations
-	githubIntegration := github.New(&cfg.Github, redisClient)
+	githubIntegration, err := github.New(&cfg.Github, redisClient)
+	if err != nil {
+		zap.L().Fatal("failed to initialize github integration", zap.Error(err))
+	}
 
 	// Notifications
 	notificationService := notifications.New(

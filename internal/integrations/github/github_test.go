@@ -46,5 +46,9 @@ func setupGithubService(t *testing.T) *GithubService {
 		Addr: redisAddr,
 	})
 
-	return New(ghConfig, redisClient)
+	svc, err := New(ghConfig, redisClient)
+	if err != nil {
+		t.Fatalf("setup github service: %v", err)
+	}
+	return svc
 }

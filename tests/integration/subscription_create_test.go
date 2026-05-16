@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"se-school/internal/integrations/github"
 	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/internal/notifications/templates"
@@ -60,7 +61,7 @@ func TestCreate_NewRepo_PersistsAndSendsConfirmation(t *testing.T) {
 		t.Fatalf("expected receiver user@example.com, got %v", call.Receivers)
 	}
 
-	cacheKey := "github:repo_version:octocat/hello-world"
+	cacheKey := github.CacheKey("octocat", "hello-world")
 	if got, err := s.Redis.Get(s.Ctx, cacheKey).Result(); err != nil {
 		t.Fatalf("expected redis cache key %s to be set: %v", cacheKey, err)
 	} else if got != "v1.0.0" {
@@ -185,7 +186,7 @@ func TestCreate_RedisCacheShortCircuitsGithub(t *testing.T) {
 	// repository row does NOT exist in the DB yet, so the service will
 	// route through the github integration, which must hit redis first
 	// and skip the HTTP call entirely.
-	cacheKey := "github:repo_version:octocat/hello-world"
+	cacheKey := github.CacheKey("octocat", "hello-world")
 	if err := s.Redis.Set(s.Ctx, cacheKey, "v5.5.5", 0).Err(); err != nil {
 		t.Fatalf("seed redis cache: %v", err)
 	}
