@@ -12,3 +12,6 @@ check-lint:
 
 swagger:
 	@swag init -g cmd/main.go -o docs/generated
+
+unit-test:
+	@go test ./internal/...
