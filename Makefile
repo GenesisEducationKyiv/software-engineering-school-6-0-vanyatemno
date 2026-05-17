@@ -17,8 +17,19 @@ test-unit:
 	go test -race -count=1 ./internal/...
 
 test-integration:
-	docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
-	docker compose -f docker-compose.test.yml down -v
+	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests; \
+	rc=$$?; \
+	docker compose -f docker-compose.test.yml down -v; \
+	exit $$rc
 
 test-integration-down:
 	docker compose -f docker-compose.test.yml down -v
+
+test-e2e:
+	@docker compose --env-file .env.e2e -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from tests; \
+	rc=$$?; \
+	docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v; \
+	exit $$rc
+
+test-e2e-down:
+	docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v

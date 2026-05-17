@@ -41,6 +41,32 @@ Teardown only, if a previous run crashed mid-flight:
 make test-integration-down
 ```
 
+## End-to-end tests
+
+```bash
+make test-e2e
+```
+
+What it runs:
+
+1. `docker compose --env-file .env.e2e -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from tests` brings up the full stack:
+   - `postgres:16.3-alpine` + `redis:7-alpine` (tmpfs, healthchecked).
+   - `axllent/mailpit` as the SMTP target so tests can assert email delivery and pull confirmation tokens out of the rendered HTML.
+   - The backend, built from `Dockerfile`, pointed at the in-network Postgres/Redis/Mailpit and the **real** GitHub API. The release-check cron is parked at `0 0 1 1 *` so it doesn't fire during a run.
+   - The frontend (`tests/e2e/Dockerfile.frontend`) clones [`vanyatemno/se-school-2026-frontend`](https://github.com/vanyatemno/se-school-2026-frontend), builds it with `VITE_API_URL=http://backend:8080/api` / `VITE_API_KEY=e2e-key`, and serves the static bundle from nginx on `:4173` with SPA fallback.
+   - The `tests` runner (`tests/e2e/Dockerfile.runner`) installs Playwright browsers + OS deps and runs `go test ./tests/e2e/...` against the stack.
+2. `docker compose ... down -v` tears everything down.
+
+The Go test module lives at `tests/e2e/go.mod` (separate from the main module so the Playwright/pgx deps don't bleed into the application).
+
+**Prerequisite:** edit `.env.e2e` and set `GITHUB_TOKEN=...` to a real personal access token (classic, `public_repo` scope). The backend hits the live GitHub API to validate repositories during subscribe — no GitHub stub is used.
+
+Teardown only, if a previous run crashed mid-flight:
+
+```bash
+make test-e2e-down
+```
+
 ## CI
 
 GitHub Actions runs each suite in its own workflow on every push to `main` and every PR:

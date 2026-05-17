@@ -35,11 +35,6 @@ services:
     image: axllent/mailpit:latest
     networks:
       - github-subscriptions-e2e
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
-      interval: 2s
-      timeout: 2s
-      retries: 30
 
   backend:
     build:
@@ -69,14 +64,9 @@ services:
       redis-e2e:
         condition: service_healthy
       mailpit:
-        condition: service_healthy
+        condition: service_started
     networks:
       - github-subscriptions-e2e
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/swagger/index.html"]
-      interval: 2s
-      timeout: 2s
-      retries: 30
 
   frontend:
     build:
@@ -87,11 +77,6 @@ services:
         VITE_API_KEY: "e2e-key"
     networks:
       - github-subscriptions-e2e
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4173"]
-      interval: 2s
-      timeout: 2s
-      retries: 30
 
   tests:
     build:
@@ -105,10 +90,10 @@ services:
       E2E_DB_DSN: "postgres://e2e:e2e@postgres-e2e:5432/e2e?sslmode=disable"
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
       frontend:
-        condition: service_healthy
+        condition: service_started
       mailpit:
-        condition: service_healthy
+        condition: service_started
     networks:
       - github-subscriptions-e2e
