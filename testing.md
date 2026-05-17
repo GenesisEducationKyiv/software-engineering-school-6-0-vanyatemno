@@ -59,7 +59,14 @@ What it runs:
 
 The Go test module lives at `tests/e2e/go.mod` (separate from the main module so the Playwright/pgx deps don't bleed into the application).
 
-**Prerequisite:** edit `.env.e2e` and set `GITHUB_TOKEN=...` to a real personal access token (classic, `public_repo` scope). The backend hits the live GitHub API to validate repositories during subscribe — no GitHub stub is used.
+**Prerequisite:** copy the example file and fill in a token:
+
+```bash
+cp .env.e2e.example .env.e2e
+# then edit .env.e2e and set GITHUB_TOKEN=...
+```
+
+The token is a GitHub personal access token (classic, `public_repo` scope). The backend hits the live GitHub API to validate repositories during subscribe — no GitHub stub is used. `.env.e2e` is gitignored.
 
 Teardown only, if a previous run crashed mid-flight:
 

@@ -13,7 +13,7 @@ func TestSubscribe_ValidRepo_CreatesUnconfirmedSubscription(t *testing.T) {
 	s := helpers.NewSuite(t)
 	email := "subscribe-ok@e2e.local"
 
-	s.SubscribeViaUI(email, "golang/go")
+	s.SubscribeViaUI(email, "cli/cli")
 	s.WaitForSubscribeSuccess()
 
 	if got := s.CountActiveSubs(email); got != 1 {

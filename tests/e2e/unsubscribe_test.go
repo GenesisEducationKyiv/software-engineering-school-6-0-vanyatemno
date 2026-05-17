@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"se-school/tests/e2e/helpers"
+
+	"github.com/playwright-community/playwright-go"
 )
 
 // TestUnsubscribe_HappyPath: after subscribe+confirm, navigating to
@@ -19,14 +21,14 @@ func TestUnsubscribe_HappyPath(t *testing.T) {
 	s := helpers.NewSuite(t)
 	email := "unsub-ok@e2e.local"
 
-	s.SubscribeViaUI(email, "golang/go")
+	s.SubscribeViaUI(email, "cli/cli")
 	s.WaitForSubscribeSuccess()
 	s.ConfirmViaMailLink(email)
 
-	code := s.FetchUnsubscribeCode(email, "golang", "go")
+	code := s.FetchUnsubscribeCode(email, "cli", "cli")
 
 	s.GoTo("/unsubscribe/" + code)
-	loc := s.Page.GetByText("Unsubscribed")
+	loc := s.Page.Locator("h2", playwright.PageLocatorOptions{HasText: "Unsubscribed"})
 	if err := loc.WaitFor(); err != nil {
 		t.Fatalf("unsubscribe success heading not visible: %v", err)
 	}

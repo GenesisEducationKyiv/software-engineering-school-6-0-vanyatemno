@@ -14,7 +14,7 @@ func TestList_ShowsConfirmedSubscription(t *testing.T) {
 	s := helpers.NewSuite(t)
 	email := "list-ok@e2e.local"
 
-	s.SubscribeViaUI(email, "octocat/Hello-World")
+	s.SubscribeViaUI(email, "facebook/react")
 	s.WaitForSubscribeSuccess()
 	s.ConfirmViaMailLink(email)
 
@@ -26,7 +26,7 @@ func TestList_ShowsConfirmedSubscription(t *testing.T) {
 		t.Fatalf("click search: %v", err)
 	}
 
-	loc := s.Page.GetByText("octocat/Hello-World")
+	loc := s.Page.GetByText("facebook/react")
 	if err := loc.WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
 		Timeout: playwright.Float(10000),

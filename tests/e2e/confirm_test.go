@@ -13,7 +13,7 @@ func TestConfirm_HappyPath(t *testing.T) {
 	s := helpers.NewSuite(t)
 	email := "confirm-ok@e2e.local"
 
-	s.SubscribeViaUI(email, "golang/go")
+	s.SubscribeViaUI(email, "cli/cli")
 	s.WaitForSubscribeSuccess()
 	s.ConfirmViaMailLink(email)
 
