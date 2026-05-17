@@ -22,11 +22,11 @@ import (
 // single non-empty segment. Each request increments a call counter exposed
 // via Calls() so tests can assert on cache-miss behavior.
 type MSWServer struct {
-	t        *testing.T
-	server   *httptest.Server
-	mu       sync.Mutex
-	handlers []registration
-	calls    []Call
+	t         *testing.T
+	server    *httptest.Server
+	mu        sync.Mutex
+	handlers  []registration
+	calls     []Call
 	unmatched func(Request) Response
 }
 

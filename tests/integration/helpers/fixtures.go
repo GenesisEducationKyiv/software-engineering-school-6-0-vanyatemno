@@ -108,4 +108,3 @@ func (s *Suite) CodeExists(t *testing.T, id uint) bool {
 	}
 	return n > 0
 }
-

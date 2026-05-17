@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -154,8 +155,41 @@ func TestCreate_DuplicateEmailRepo_SecondCallFails(t *testing.T) {
 	if got := s.CountSubscriptions(t); got != 1 {
 		t.Fatalf("expected 1 subscription after duplicate, got %d", got)
 	}
+	if got := s.CountCodes(t); got != 2 {
+		t.Fatalf("expected 2 codes after duplicate (no orphans), got %d", got)
+	}
 	if len(s.Notifier.SendEmailCalls) != 1 {
 		t.Fatalf("expected only 1 confirmation email after duplicate, got %d", len(s.Notifier.SendEmailCalls))
+	}
+}
+
+func TestCreate_EmailFailure_RollsBackSubscriptionAndCodes(t *testing.T) {
+	s := helpers.NewSuite(t)
+
+	s.GH.Get("/repos/:owner/:repo/releases/latest", func(req helpers.Request) helpers.Response {
+		return helpers.JSON(http.StatusOK, map[string]any{"tag_name": "v1.0.0"})
+	})
+	s.Notifier.SetSendEmailErr(errors.New("smtp down"))
+
+	err := s.Svc.Create(s.Ctx, &dto.CreateSubscriptionRequest{
+		Email: "user@example.com",
+		Repo:  "octocat/hello-world",
+	})
+	if err == nil {
+		t.Fatal("expected error when email send fails, got nil")
+	}
+
+	if got := s.CountSubscriptions(t); got != 0 {
+		t.Fatalf("expected subscription to be rolled back, got %d live rows", got)
+	}
+	if got := s.CountCodes(t); got != 0 {
+		t.Fatalf("expected both codes to be rolled back, got %d live rows", got)
+	}
+	// Repository row is intentionally NOT rolled back: it represents the
+	// upstream project, not the subscription, and future subscribers for
+	// the same repo should reuse it.
+	if got := s.CountRepositories(t); got != 1 {
+		t.Fatalf("expected repository row to remain after email failure, got %d", got)
 	}
 }
 
@@ -209,4 +243,3 @@ func TestCreate_RedisCacheShortCircuitsGithub(t *testing.T) {
 		t.Fatalf("expected 0 msw calls (cache hit), got %d", s.GH.CallCount())
 	}
 }
-
