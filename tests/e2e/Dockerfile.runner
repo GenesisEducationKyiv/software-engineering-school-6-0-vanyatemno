@@ -1,0 +1,14 @@
+FROM golang:1.26-bookworm
+
+WORKDIR /app
+
+COPY tests/e2e/go.mod tests/e2e/go.sum ./
+RUN go mod download
+
+# Install Playwright driver + browsers + OS deps that match the
+# playwright-go version pinned in go.mod.
+RUN go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium
+
+COPY tests/e2e/ ./
+
+CMD ["go", "test", "-count=1", "-v", "-timeout=10m", "./..."]
