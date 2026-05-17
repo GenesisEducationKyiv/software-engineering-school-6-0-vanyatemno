@@ -13,17 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  golangci-lint:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache: false
+          go-version: stable
 
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.1
-          args: --timeout=5m
+          version: latest
+          args: --config .golangci.yml ./...
