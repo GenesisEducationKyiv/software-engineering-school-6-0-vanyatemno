@@ -7,10 +7,10 @@ import (
 	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/internal/notifications/templates"
+	"se-school/internal/repositories"
 	"strings"
 
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 func (s *Service) Create(
@@ -96,7 +96,7 @@ func (s *Service) getOrCreateRepository(ctx context.Context, values *parsedRepoV
 		Name:  values.RepositoryName,
 	})
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if !errors.Is(err, repositories.ErrNotFound) {
 			return nil, err
 		}
 		repository, err = s.createRepository(ctx, values)

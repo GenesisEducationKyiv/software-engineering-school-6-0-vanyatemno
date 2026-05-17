@@ -1,11 +1,20 @@
 package repository
 
-import "se-school/internal/models"
+import (
+	"errors"
+	"se-school/internal/models"
+	"se-school/internal/repositories"
+
+	"gorm.io/gorm"
+)
 
 func (r *Repository) GetByID(id uint) (*models.Repository, error) {
 	var repository models.Repository
 	err := r.db.Where("id = ?", id).First(&repository).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -19,6 +28,9 @@ func (r *Repository) Find(repo *models.Repository) (*models.Repository, error) {
 		First(&repository).
 		Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
 

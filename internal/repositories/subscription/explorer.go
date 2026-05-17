@@ -3,12 +3,18 @@ package subscription
 import (
 	"errors"
 	"se-school/internal/models"
+	"se-school/internal/repositories"
+
+	"gorm.io/gorm"
 )
 
 func (r *Repository) GetByID(id uint) (*models.Subscription, error) {
 	var subscription models.Subscription
 	err := r.db.Where("id = ?", id).First(&subscription).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
 
@@ -55,6 +61,9 @@ func (r *Repository) GetByCode(codeID uint, codeType models.CodeType) (*models.S
 	}
 	err := query.First(&subscription).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
 
