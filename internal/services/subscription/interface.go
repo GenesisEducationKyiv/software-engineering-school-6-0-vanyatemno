@@ -7,8 +7,8 @@ import (
 )
 
 type SubscriptionsService interface {
-	ListByEmail(*dto.GetSubscriptionsRequest) ([]*models.Subscription, error)
+	ListByEmail(context.Context, *dto.GetSubscriptionsRequest) ([]*models.Subscription, error)
 	Create(context.Context, *dto.CreateSubscriptionRequest) error
-	Confirm(*dto.ConfirmSubscriptionRequest) error
-	Unsubscribe(*dto.UnsubscribeRequest) error
+	Confirm(context.Context, *dto.ConfirmSubscriptionRequest) error
+	Unsubscribe(context.Context, *dto.UnsubscribeRequest) error
 }

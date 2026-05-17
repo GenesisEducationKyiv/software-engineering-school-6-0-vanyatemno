@@ -7,10 +7,10 @@ import (
 	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/internal/notifications/templates"
+	"se-school/internal/repositories"
 	"strings"
 
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 func (s *Service) Create(
@@ -25,7 +25,7 @@ func (s *Service) Create(
 	err = s.sendConfirmationCode(sub)
 	if err != nil {
 		zap.L().Error("failed to send confirmation code", zap.Error(err))
-		deleteError := s.subscriptionsRepository.Delete(sub)
+		deleteError := s.subscriptionsRepository.Delete(ctx, sub)
 		if deleteError != nil {
 			zap.L().Error("failed to rollback subscription create", zap.Error(deleteError))
 			return deleteError
@@ -51,23 +51,25 @@ func (s *Service) createNewSubscription(
 		return nil, err
 	}
 
-	unsubCode, err := s.codesRepository.Create(models.CodeTypeUnsubscribe)
+	unsubCode, err := s.codesRepository.Create(ctx, models.CodeTypeUnsubscribe)
 	if err != nil {
 		return nil, err
 	}
-	subCode, err := s.codesRepository.Create(models.CodeTypeConfirm)
+	subCode, err := s.codesRepository.Create(ctx, models.CodeTypeConfirm)
 	if err != nil {
 		return nil, err
 	}
 
 	sub := &models.Subscription{
 		RepositoryID:      repo.ID,
+		SubscribeCodeID:   subCode.ID,
 		UnsubscribeCodeID: unsubCode.ID,
 		SubscribeCode:     subCode,
+		UnsubscribeCode:   unsubCode,
 		Email:             req.Email,
 		LastSeenTag:       repo.Version,
 	}
-	err = s.subscriptionsRepository.Create(sub)
+	err = s.subscriptionsRepository.Create(ctx, sub)
 	if err != nil {
 		zap.L().Error("failed to create subscription", zap.Error(err))
 		return nil, err
@@ -91,12 +93,12 @@ func parseRepoFields(repo string) (*parsedRepoValue, error) {
 }
 
 func (s *Service) getOrCreateRepository(ctx context.Context, values *parsedRepoValue) (*models.Repository, error) {
-	repository, err := s.repositoriesRepository.Find(&models.Repository{
+	repository, err := s.repositoriesRepository.Find(ctx, &models.Repository{
 		Owner: values.Owner,
 		Name:  values.RepositoryName,
 	})
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if !errors.Is(err, repositories.ErrNotFound) {
 			return nil, err
 		}
 		repository, err = s.createRepository(ctx, values)
@@ -118,7 +120,7 @@ func (s *Service) createRepository(ctx context.Context, values *parsedRepoValue)
 		Name:    values.RepositoryName,
 		Version: currentVersion,
 	}
-	err = s.repositoriesRepository.Create(repo)
+	err = s.repositoriesRepository.Create(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
