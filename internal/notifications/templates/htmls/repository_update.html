@@ -1,0 +1,206 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>New Release: {{.Name}} {{.Version}}</title>
+    <style type="text/css">
+        /* Base resets */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; display: block; }
+
+        /* Dark mode overrides (Apple Mail, iOS, newer Outlook) */
+        @media (prefers-color-scheme: dark) {
+            .email-bg     { background-color: #0d1117 !important; }
+            .card         { background-color: #161b22 !important; border-color: #30363d !important; }
+            .body-text    { color: #c9d1d9 !important; }
+            .muted-text   { color: #8b949e !important; }
+            .header-bg    { background-color: #161b22 !important; border-bottom-color: #30363d !important; }
+            .badge        { background-color: #1f3a1f !important; color: #3fb950 !important; }
+            .btn-primary  { background-color: #238636 !important; border-color: #2ea043 !important; }
+            .divider      { border-color: #30363d !important; }
+            .meta-row td  { border-top-color: #30363d !important; }
+        }
+    </style>
+</head>
+<body class="email-bg" style="margin:0; padding:0; background-color:#f3f4f6; font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+
+<!-- Outer wrapper -->
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+        <td class="email-bg" style="padding: 40px 16px; background-color:#f3f4f6;">
+
+            <!-- Card container -->
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%"
+                   style="max-width:560px; margin:0 auto;">
+
+                <!-- ── HEADER ── -->
+                <tr>
+                    <td class="card header-bg"
+                        style="background-color:#ffffff; border:1px solid #e1e4e8;
+                       border-bottom: 1px solid #e1e4e8;
+                       border-radius:8px 8px 0 0; padding:28px 32px 24px;">
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <td width="36" valign="middle" style="padding-right:12px;">
+                                    <!-- GitHub-style octicon mark (inline SVG, falls back gracefully) -->
+                                    <img src="https://github.githubassets.com/favicons/favicon.png"
+                                         width="32" height="32" alt="GitHub"
+                                         style="border-radius:4px; display:block;" />
+                                </td>
+                                <td valign="middle">
+                                    <p style="margin:0; font-size:12px; color:#57606a; letter-spacing:0.5px; text-transform:uppercase;" class="muted-text">
+                                        GitHub Release Notification
+                                    </p>
+                                </td>
+                                <td valign="middle" align="right">
+                                    <!-- Version badge -->
+                                    <span class="badge"
+                                          style="display:inline-block; background-color:#dafbe1; color:#1a7f37;
+                                 font-size:12px; font-weight:600; padding:3px 10px;
+                                 border-radius:20px; font-family:monospace;">
+                      {{.Version}}
+                    </span>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── BODY ── -->
+                <tr>
+                    <td class="card"
+                        style="background-color:#ffffff; border-left:1px solid #e1e4e8;
+                       border-right:1px solid #e1e4e8; padding:32px;">
+
+                        <!-- Title -->
+                        <h1 class="body-text"
+                            style="margin:0 0 8px; font-size:22px; font-weight:700;
+                         color:#24292f; line-height:1.3;">
+                            {{.Name}} {{.Version}} released
+                        </h1>
+
+                        <!-- Subtitle -->
+                        <p class="muted-text"
+                           style="margin:0 0 28px; font-size:14px; color:#57606a; line-height:1.5;">
+                            A new version has been published by
+                            <strong class="body-text" style="color:#24292f;">{{.Owner}}</strong>.
+                            Check out what's new and update your dependencies.
+                        </p>
+
+                        <!-- CTA Button -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td style="border-radius:6px;" bgcolor="#2da44e">
+                                    <a href="https://github.com/{{.Owner}}/{{.Name}}" class="btn-primary"
+                                       target="_blank"
+                                       style="display:inline-block; padding:10px 22px;
+                              font-size:14px; font-weight:600; color:#ffffff;
+                              text-decoration:none; border-radius:6px;
+                              background-color:#2da44e; border:1px solid #2c974b;
+                              font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+                                        View Release on GitHub →
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- Divider -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <td class="divider"
+                                    style="padding:28px 0 0; border-top:1px solid #e1e4e8;">
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- Meta rows -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0"
+                               width="100%" class="meta-row">
+
+                            <tr>
+                                <td style="padding:14px 0 0; width:40%;">
+                                    <p class="muted-text"
+                                       style="margin:0; font-size:12px; color:#57606a;
+                              text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+                                        Repository
+                                    </p>
+                                </td>
+                                <td style="padding:14px 0 0;">
+                                    <p class="body-text"
+                                       style="margin:0; font-size:14px; color:#24292f; font-weight:500;">
+                                        <a href="https://github.com/{{.Owner}}/{{.Name}}" target="_blank"
+                                           style="color:#0969da; text-decoration:none;">
+                                            {{.Owner}}/{{.Name}}
+                                        </a>
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding:10px 0 0;">
+                                    <p class="muted-text"
+                                       style="margin:0; font-size:12px; color:#57606a;
+                              text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+                                        Owner
+                                    </p>
+                                </td>
+                                <td style="padding:10px 0 0;">
+                                    <p class="body-text"
+                                       style="margin:0; font-size:14px; color:#24292f;">
+                                        {{.Owner}}
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding:10px 0 0;">
+                                    <p class="muted-text"
+                                       style="margin:0; font-size:12px; color:#57606a;
+                              text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+                                        Version
+                                    </p>
+                                </td>
+                                <td style="padding:10px 0 0;">
+                                    <p style="margin:0; font-size:14px; font-family:monospace;
+                               color:#1a7f37; font-weight:600;">
+                                        {{.Version}}
+                                    </p>
+                                </td>
+                            </tr>
+
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── FOOTER ── -->
+                <tr>
+                    <td class="email-bg"
+                        style="background-color:#f3f4f6; border:1px solid #e1e4e8;
+                       border-top:none; border-radius:0 0 8px 8px;
+                       padding:16px 32px; text-align:center;">
+                        <p class="muted-text"
+                           style="margin:0; font-size:12px; color:#57606a; line-height:1.6;">
+                            You're receiving this because you watch
+                            <a href="https://github.com/{{.Owner}}/{{.Name}}" target="_blank"
+                               style="color:#57606a;">{{.Owner}}/{{.Name}}</a>.
+                            <br/>
+                            <a href="{{.UnsubscribeURL}}" style="color:#57606a;">Unsubscribe</a>
+                        </p>
+                    </td>
+                </tr>
+
+            </table>
+            <!-- /Card -->
+
+        </td>
+    </tr>
+</table>
+<!-- /Outer wrapper -->
+
+</body>
+</html>
