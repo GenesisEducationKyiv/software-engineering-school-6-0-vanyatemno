@@ -13,6 +13,9 @@ check-lint:
 swagger:
 	@swag init -g cmd/main.go -o docs/generated
 
+test-unit:
+	go test -race -count=1 ./internal/...
+
 test-integration:
 	docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
 	docker compose -f docker-compose.test.yml down -v
