@@ -5,7 +5,9 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"strings"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
 	"se-school/internal/config"
@@ -49,7 +51,7 @@ func Connect(cfg *config.Database) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
-	if err := runMigrations(cfg.DNS); err != nil {
+	if err := runMigrations(poolCfg); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
@@ -57,13 +59,13 @@ func Connect(cfg *config.Database) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func runMigrations(dsn string) error {
+func runMigrations(poolCfg *pgxpool.Config) error {
 	source, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		return fmt.Errorf("open migrations fs: %w", err)
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", source, toMigrateDSN(dsn))
+	m, err := migrate.NewWithSourceInstance("iofs", source, toMigrateURL(poolCfg))
 	if err != nil {
 		return fmt.Errorf("init migrator: %w", err)
 	}
@@ -75,14 +77,32 @@ func runMigrations(dsn string) error {
 	return nil
 }
 
-// toMigrateDSN re-prefixes a URL-form Postgres DSN with the "pgx5" scheme that
-// the golang-migrate pgx/v5 driver expects. Keyword-form DSNs are unsupported
-// by the migrate driver and are passed through unchanged.
-func toMigrateDSN(dsn string) string {
-	for _, prefix := range []string{"postgres://", "postgresql://"} {
-		if strings.HasPrefix(dsn, prefix) {
-			return "pgx5://" + strings.TrimPrefix(dsn, prefix)
+// toMigrateURL renders the already-parsed pgx connection details as a pgx5://
+// URL for the golang-migrate pgx/v5 driver. This works regardless of whether
+// the original DSN was URL-form (postgres://…) or keyword-form (host=… user=…).
+func toMigrateURL(cfg *pgxpool.Config) string {
+	cc := cfg.ConnConfig
+	u := &url.URL{
+		Scheme: "pgx5",
+		User:   url.UserPassword(cc.User, cc.Password),
+		Host:   net.JoinHostPort(cc.Host, strconv.Itoa(int(cc.Port))),
+		Path:   "/" + cc.Database,
+	}
+
+	q := u.Query()
+	for k, v := range cc.RuntimeParams {
+		q.Set(k, v)
+	}
+	// pgx parses `sslmode` into TLSConfig rather than RuntimeParams, so it gets
+	// dropped above. Reconstruct sslmode from TLSConfig presence so the migrate
+	// driver opens the connection the same way pgxpool does.
+	if _, set := q["sslmode"]; !set {
+		if cc.TLSConfig == nil {
+			q.Set("sslmode", "disable")
+		} else {
+			q.Set("sslmode", "require")
 		}
 	}
-	return dsn
+	u.RawQuery = q.Encode()
+	return u.String()
 }
