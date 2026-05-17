@@ -1,6 +1,9 @@
 package subscription
 
-import "se-school/internal/models"
+import (
+	"context"
+	"se-school/internal/models"
+)
 
 type SubscriptionsRepositoryMock struct {
 	GetUnupdatedResult []*models.Subscription
@@ -25,34 +28,34 @@ func NewSubscriptionsRepositoryMock() *SubscriptionsRepositoryMock {
 	return &SubscriptionsRepositoryMock{}
 }
 
-func (m *SubscriptionsRepositoryMock) GetByID(_ uint) (*models.Subscription, error) {
+func (m *SubscriptionsRepositoryMock) GetByID(_ context.Context, _ uint) (*models.Subscription, error) {
 	return m.GetByIDResult, m.GetByIDErr
 }
 
-func (m *SubscriptionsRepositoryMock) GetUnupdated(_ uint, _ string) ([]*models.Subscription, error) {
+func (m *SubscriptionsRepositoryMock) GetUnupdated(_ context.Context, _ uint, _ string) ([]*models.Subscription, error) {
 	return m.GetUnupdatedResult, m.GetUnupdatedErr
 }
 
-func (m *SubscriptionsRepositoryMock) GetByCode(_ uint, _ models.CodeType) (*models.Subscription, error) {
+func (m *SubscriptionsRepositoryMock) GetByCode(_ context.Context, _ uint, _ models.CodeType) (*models.Subscription, error) {
 	return m.GetByCodeResult, m.GetByCodeErr
 }
 
-func (m *SubscriptionsRepositoryMock) GetByEmail(_ string) ([]*models.Subscription, error) {
+func (m *SubscriptionsRepositoryMock) GetByEmail(_ context.Context, _ string) ([]*models.Subscription, error) {
 	return m.GetByEmailResult, m.GetByEmailErr
 }
 
-func (m *SubscriptionsRepositoryMock) Create(_ *models.Subscription) error {
+func (m *SubscriptionsRepositoryMock) Create(_ context.Context, _ *models.Subscription) error {
 	return m.CreateErr
 }
 
-func (m *SubscriptionsRepositoryMock) UpdateLastSeenTag(_ uint, _ string) error {
+func (m *SubscriptionsRepositoryMock) UpdateLastSeenTag(_ context.Context, _ uint, _ string) error {
 	return m.UpdateLastSeenErr
 }
 
-func (m *SubscriptionsRepositoryMock) Save(_ *models.Subscription) error {
+func (m *SubscriptionsRepositoryMock) Save(_ context.Context, _ *models.Subscription) error {
 	return m.SaveErr
 }
 
-func (m *SubscriptionsRepositoryMock) Delete(_ *models.Subscription) error {
+func (m *SubscriptionsRepositoryMock) Delete(_ context.Context, _ *models.Subscription) error {
 	return m.DeleteErr
 }

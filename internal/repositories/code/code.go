@@ -1,56 +1,70 @@
 package code
 
 import (
+	"context"
 	"errors"
 	"se-school/internal/models"
 	"se-school/internal/repositories"
 
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	db *gorm.DB
+	db *pgxpool.Pool
 }
 
-func New(db *gorm.DB) *Repository {
-	return &Repository{
-		db: db,
+func New(db *pgxpool.Pool) *Repository {
+	return &Repository{db: db}
+}
+
+const codeColumns = "id, created_at, updated_at, deleted_at, code, type, expires_at"
+
+func scanCode(row pgx.Row) (*models.Code, error) {
+	var c models.Code
+	if err := row.Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt, &c.Code, &c.Type, &c.ExpiresAt); err != nil {
+		return nil, err
 	}
+	return &c, nil
 }
 
-func (r *Repository) Get(codeString string) (*models.Code, error) {
-	var code models.Code
-	err := r.db.Where(&models.Code{Code: codeString}).First(&code).Error
+func (r *Repository) Get(ctx context.Context, codeString string) (*models.Code, error) {
+	row := r.db.QueryRow(ctx,
+		`SELECT `+codeColumns+` FROM codes WHERE code = $1 AND deleted_at IS NULL`,
+		codeString,
+	)
+	c, err := scanCode(row)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, repositories.ErrNotFound
 		}
 		return nil, err
 	}
-
-	return &code, nil
+	return c, nil
 }
 
-func (r *Repository) Create(
-	codeType models.CodeType,
-) (*models.Code, error) {
-	code := models.Code{
-		Code: "",
-		Type: codeType,
-	}
-	err := r.setupCode(&code)
-	if err != nil {
+func (r *Repository) Create(ctx context.Context, codeType models.CodeType) (*models.Code, error) {
+	code := models.Code{Type: codeType}
+	if err := r.setupCode(&code); err != nil {
 		return nil, err
 	}
 
-	err = r.db.Create(&code).Error
-	if err != nil {
+	row := r.db.QueryRow(ctx,
+		`INSERT INTO codes (code, type, expires_at)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, created_at, updated_at`,
+		code.Code, code.Type, code.ExpiresAt,
+	)
+	if err := row.Scan(&code.ID, &code.CreatedAt, &code.UpdatedAt); err != nil {
 		return nil, err
 	}
-
 	return &code, nil
 }
 
-func (r *Repository) Delete(id uint) error {
-	return r.db.Delete(&models.Code{}, id).Error
+func (r *Repository) Delete(ctx context.Context, id uint) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE codes SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+		id,
+	)
+	return err
 }

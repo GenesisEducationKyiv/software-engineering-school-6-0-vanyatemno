@@ -54,6 +54,7 @@ func main() {
 	if err != nil {
 		zap.L().Fatal("failed to connect to database", zap.Error(err))
 	}
+	defer database.Close()
 
 	redisClient, err := redisInfra.Connect(ctx, &cfg.Redis)
 	if err != nil {

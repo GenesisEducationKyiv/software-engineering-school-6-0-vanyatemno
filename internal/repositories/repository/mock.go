@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"se-school/internal/models"
 	"se-school/internal/repositories"
 )
@@ -30,7 +31,7 @@ func NewRepositoriesRepositoryMock() *RepositoriesRepositoryMock {
 	}
 }
 
-func (m *RepositoriesRepositoryMock) GetByID(id uint) (*models.Repository, error) {
+func (m *RepositoriesRepositoryMock) GetByID(_ context.Context, id uint) (*models.Repository, error) {
 	if m.GetByIDErr != nil {
 		return nil, m.GetByIDErr
 	}
@@ -41,7 +42,7 @@ func (m *RepositoriesRepositoryMock) GetByID(id uint) (*models.Repository, error
 	return repo, nil
 }
 
-func (m *RepositoriesRepositoryMock) GetAll() ([]*models.Repository, error) {
+func (m *RepositoriesRepositoryMock) GetAll(_ context.Context) ([]*models.Repository, error) {
 	if m.GetAllErr != nil {
 		return nil, m.GetAllErr
 	}
@@ -52,7 +53,7 @@ func (m *RepositoriesRepositoryMock) GetAll() ([]*models.Repository, error) {
 	return result, nil
 }
 
-func (m *RepositoriesRepositoryMock) Find(repo *models.Repository) (*models.Repository, error) {
+func (m *RepositoriesRepositoryMock) Find(_ context.Context, repo *models.Repository) (*models.Repository, error) {
 	if m.FindErr != nil {
 		return nil, m.FindErr
 	}
@@ -61,13 +62,10 @@ func (m *RepositoriesRepositoryMock) Find(repo *models.Repository) (*models.Repo
 			return r, nil
 		}
 	}
-	if m.FindErr != nil {
-		return nil, m.FindErr
-	}
 	return nil, repositories.ErrNotFound
 }
 
-func (m *RepositoriesRepositoryMock) Create(repo *models.Repository) error {
+func (m *RepositoriesRepositoryMock) Create(_ context.Context, repo *models.Repository) error {
 	if m.CreateErr != nil {
 		return m.CreateErr
 	}
@@ -75,7 +73,7 @@ func (m *RepositoriesRepositoryMock) Create(repo *models.Repository) error {
 	return nil
 }
 
-func (m *RepositoriesRepositoryMock) FindOrCreate(repo *models.Repository) (*models.Repository, error) {
+func (m *RepositoriesRepositoryMock) FindOrCreate(_ context.Context, repo *models.Repository) (*models.Repository, error) {
 	if m.FindOrCreateErr != nil {
 		return nil, m.FindOrCreateErr
 	}
@@ -83,7 +81,7 @@ func (m *RepositoriesRepositoryMock) FindOrCreate(repo *models.Repository) (*mod
 	return repo, nil
 }
 
-func (m *RepositoriesRepositoryMock) UpdateTag(id uint, tag string) (*models.Repository, error) {
+func (m *RepositoriesRepositoryMock) UpdateTag(_ context.Context, id uint, tag string) (*models.Repository, error) {
 	m.UpdateTagCalls = append(m.UpdateTagCalls, UpdateTagCall{ID: id, Tag: tag})
 	if m.UpdateTagErr != nil {
 		return nil, m.UpdateTagErr
@@ -96,7 +94,7 @@ func (m *RepositoriesRepositoryMock) UpdateTag(id uint, tag string) (*models.Rep
 	return repo, nil
 }
 
-func (m *RepositoriesRepositoryMock) Delete(repo *models.Repository) error {
+func (m *RepositoriesRepositoryMock) Delete(_ context.Context, repo *models.Repository) error {
 	if m.DeleteErr != nil {
 		return m.DeleteErr
 	}
