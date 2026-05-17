@@ -36,14 +36,14 @@ import (
 //	@description				API key passed in the X-API-Key header
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatalf("failed to init logger: %v", err)
 	}
 	zap.ReplaceGlobals(logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	cfg, err := config.Read()
 	if err != nil {

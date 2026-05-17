@@ -21,6 +21,15 @@ linters:
     - usetesting
     - whitespace
     - nilnil
+    - errcheck
+    - errorlint
+    - bodyclose
+    - noctx
+    - nilerr
+    - nilnil
+    - prealloc
+    - wastedassign
+    - gocritic
     ### linters we tried and will not be using:
     ###
     # - structcheck # lots of false positives
