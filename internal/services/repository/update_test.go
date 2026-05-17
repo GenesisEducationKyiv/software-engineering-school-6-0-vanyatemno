@@ -12,8 +12,6 @@ import (
 	"se-school/internal/notifications/templates"
 	repoRepo "se-school/internal/repositories/repository"
 	subRepo "se-school/internal/repositories/subscription"
-
-	"gorm.io/gorm"
 )
 
 func newTestService(
@@ -38,7 +36,7 @@ func newTestService(
 
 func TestCheckRepoTagAndAlert_VersionUnchanged_SkipsUpdateAndNotification(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -62,7 +60,7 @@ func TestCheckRepoTagAndAlert_VersionUnchanged_SkipsUpdateAndNotification(t *tes
 
 func TestCheckRepoTagAndAlert_VersionChanged_UpdatesTagAndSendsNotification(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -111,7 +109,7 @@ func TestCheckRepoTagAndAlert_VersionChanged_UpdatesTagAndSendsNotification(t *t
 
 func TestCheckRepoTagAndAlert_GithubError_ReturnsError(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -131,7 +129,7 @@ func TestCheckRepoTagAndAlert_GithubError_ReturnsError(t *testing.T) {
 
 func TestCheckRepoTagAndAlert_UpdateTagError_ReturnsError(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -155,7 +153,7 @@ func TestCheckRepoTagAndAlert_UpdateTagError_ReturnsError(t *testing.T) {
 
 func TestCheckRepoTagAndAlert_GetUnupdatedError_ReturnsNil(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -176,7 +174,7 @@ func TestCheckRepoTagAndAlert_GetUnupdatedError_ReturnsNil(t *testing.T) {
 
 func TestCheckRepoTagAndAlert_SendEmailError_ReturnsNil(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -197,7 +195,7 @@ func TestCheckRepoTagAndAlert_SendEmailError_ReturnsNil(t *testing.T) {
 
 func TestCheckRepoTagAndAlert_NoSubscribers_SendsToEmptyList(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -221,8 +219,8 @@ func TestCheckRepoTagAndAlert_NoSubscribers_SendsToEmptyList(t *testing.T) {
 
 func TestCheckAllReposTagAndAlert_ProcessesAllRepositories(t *testing.T) {
 	repos := map[uint]*models.Repository{
-		1: {Model: gorm.Model{ID: 1}, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
-		2: {Model: gorm.Model{ID: 2}, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
+		1: {ID: 1, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
+		2: {ID: 2, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
 	}
 
 	svc, repoMock, _, _, _ := newTestService("v2.0.0", repos, []*models.Subscription{})
@@ -252,8 +250,8 @@ func TestCheckAllReposTagAndAlert_GetAllError_ReturnsError(t *testing.T) {
 
 func TestCheckAllReposTagAndAlert_PartialFailure_ContinuesProcessing(t *testing.T) {
 	repos := map[uint]*models.Repository{
-		1: {Model: gorm.Model{ID: 1}, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
-		2: {Model: gorm.Model{ID: 2}, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
+		1: {ID: 1, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
+		2: {ID: 2, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
 	}
 
 	svc, _, _, _, githubMock := newTestService("", repos, []*models.Subscription{})
@@ -276,7 +274,7 @@ func TestCheckAllReposTagAndAlert_EmptyRepositoryList_ReturnsNil(t *testing.T) {
 
 func TestCheckRepoTagAndAlert_VersionChanged_UpdatesRepoVersionInStore(t *testing.T) {
 	repo := &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",

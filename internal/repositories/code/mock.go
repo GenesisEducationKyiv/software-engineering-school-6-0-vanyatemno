@@ -1,6 +1,9 @@
 package code
 
-import "se-school/internal/models"
+import (
+	"context"
+	"se-school/internal/models"
+)
 
 type CodesRepositoryMock struct {
 	GetResult    *models.Code
@@ -17,11 +20,11 @@ func NewCodesRepositoryMock() *CodesRepositoryMock {
 	return &CodesRepositoryMock{}
 }
 
-func (m *CodesRepositoryMock) Get(_ string) (*models.Code, error) {
+func (m *CodesRepositoryMock) Get(_ context.Context, _ string) (*models.Code, error) {
 	return m.GetResult, m.GetErr
 }
 
-func (m *CodesRepositoryMock) Create(codeType models.CodeType) (*models.Code, error) {
+func (m *CodesRepositoryMock) Create(_ context.Context, codeType models.CodeType) (*models.Code, error) {
 	m.CreateCalls = append(m.CreateCalls, codeType)
 	if m.CreateErr != nil {
 		return nil, m.CreateErr
@@ -32,7 +35,7 @@ func (m *CodesRepositoryMock) Create(codeType models.CodeType) (*models.Code, er
 	return &models.Code{Type: codeType, Code: "mock-code"}, nil
 }
 
-func (m *CodesRepositoryMock) Delete(id uint) error {
+func (m *CodesRepositoryMock) Delete(_ context.Context, id uint) error {
 	m.DeleteCalls = append(m.DeleteCalls, id)
 	return m.DeleteErr
 }

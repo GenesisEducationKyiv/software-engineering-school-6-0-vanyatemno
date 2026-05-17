@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"se-school/internal/infrastructure/db"
+	"se-school/internal/repositories"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/go-github/v84/github"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // handleServiceError maps known service/repository errors to appropriate HTTP responses.
@@ -17,7 +17,7 @@ func handleServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found on GitHub"})
 		return
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, repositories.ErrNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
 		return
 	}

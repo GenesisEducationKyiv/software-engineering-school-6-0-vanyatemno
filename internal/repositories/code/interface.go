@@ -1,9 +1,12 @@
 package code
 
-import "se-school/internal/models"
+import (
+	"context"
+	"se-school/internal/models"
+)
 
 type CodesRepository interface {
-	Get(code string) (*models.Code, error)
-	Create(codeType models.CodeType) (*models.Code, error)
-	Delete(id uint) error
+	Get(ctx context.Context, code string) (*models.Code, error)
+	Create(ctx context.Context, codeType models.CodeType) (*models.Code, error)
+	Delete(ctx context.Context, id uint) error
 }
