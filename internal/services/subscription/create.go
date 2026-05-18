@@ -57,19 +57,28 @@ func (s *Service) createNewSubscription(
 	}
 	subCode, err := s.codesRepository.Create(models.CodeTypeConfirm)
 	if err != nil {
+		if delErr := s.codesRepository.Delete(unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
 		return nil, err
 	}
 
 	sub := &models.Subscription{
 		RepositoryID:      repo.ID,
+		SubscribeCodeID:   subCode.ID,
 		UnsubscribeCodeID: unsubCode.ID,
-		SubscribeCode:     subCode,
 		Email:             req.Email,
 		LastSeenTag:       repo.Version,
 	}
 	err = s.subscriptionsRepository.Create(sub)
 	if err != nil {
 		zap.L().Error("failed to create subscription", zap.Error(err))
+		if delErr := s.codesRepository.Delete(unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
+		if delErr := s.codesRepository.Delete(subCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback subscribe code", zap.Error(delErr))
+		}
 		return nil, err
 	}
 	sub.SubscribeCode = subCode

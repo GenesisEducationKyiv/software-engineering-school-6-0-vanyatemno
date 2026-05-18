@@ -1,0 +1,99 @@
+networks:
+  github-subscriptions-e2e:
+    name: subscriptions-e2e
+
+services:
+  postgres-e2e:
+    image: postgres:16.3-alpine
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e
+      POSTGRES_DB: e2e
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - github-subscriptions-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d e2e"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  redis-e2e:
+    image: redis:7-alpine
+    tmpfs:
+      - /data
+    networks:
+      - github-subscriptions-e2e
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:latest
+    networks:
+      - github-subscriptions-e2e
+
+  backend:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    environment:
+      DB_DSN: "host=postgres-e2e user=e2e password=e2e dbname=e2e port=5432 sslmode=disable"
+      SERVER_PORT: "8080"
+      SERVER_API_KEY: "e2e-key"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      MAILER_HOST: "mailpit"
+      MAILER_PORT: "1025"
+      MAILER_USERNAME: ""
+      MAILER_FROM: "noreply@e2e.local"
+      MAILER_SMTP: "mailpit"
+      MAILER_PASSWORD: ""
+      REDIS_ADDRESS: "redis-e2e:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      # Disable the release-check cron during e2e by scheduling it for
+      # a date that won't fire during the run.
+      CRON_REPO_CHECK_SCHEDULE: "0 0 1 1 *"
+      FRONTEND_URL: "http://frontend:4173"
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      redis-e2e:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    networks:
+      - github-subscriptions-e2e
+
+  frontend:
+    build:
+      context: ./
+      dockerfile: ./tests/e2e/Dockerfile.frontend
+      args:
+        VITE_API_URL: "http://backend:8080/api"
+        VITE_API_KEY: "e2e-key"
+    networks:
+      - github-subscriptions-e2e
+
+  tests:
+    build:
+      context: ./
+      dockerfile: ./tests/e2e/Dockerfile.runner
+    environment:
+      E2E_FRONTEND_URL: "http://frontend:4173"
+      E2E_BACKEND_URL: "http://backend:8080"
+      E2E_API_KEY: "e2e-key"
+      E2E_MAILPIT_URL: "http://mailpit:8025"
+      E2E_DB_DSN: "postgres://e2e:e2e@postgres-e2e:5432/e2e?sslmode=disable"
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    networks:
+      - github-subscriptions-e2e

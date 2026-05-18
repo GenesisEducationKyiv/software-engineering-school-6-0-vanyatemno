@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"se-school/internal/config"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v84/github"
@@ -22,12 +24,30 @@ type GithubService struct {
 	cache  *redis.Client
 }
 
-func New(cfg *config.Github, cache *redis.Client) *GithubService {
+func New(cfg *config.Github, cache *redis.Client) (*GithubService, error) {
 	client := github.NewClient(nil).WithAuthToken(cfg.Token)
+	if cfg.BaseURL != "" {
+		raw := cfg.BaseURL
+		if !strings.HasSuffix(raw, "/") {
+			raw += "/"
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("github: invalid base url %q: %w", cfg.BaseURL, err)
+		}
+		client.BaseURL = u
+	}
 	return &GithubService{
 		client: client,
 		cache:  cache,
-	}
+	}, nil
+}
+
+// CacheKey returns the Redis key under which the latest release tag for
+// the given repository is cached. Exposed so callers/tests can reason
+// about the cache without duplicating the format string.
+func CacheKey(owner, repositoryName string) string {
+	return buildRepoCacheKey(owner, repositoryName)
 }
 
 func (g *GithubService) GetRepositoryVersion(ctx context.Context, owner, repositoryName string) (string, error) {
