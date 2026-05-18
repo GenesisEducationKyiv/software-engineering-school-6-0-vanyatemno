@@ -23,6 +23,7 @@ tmp/
 
 # env file
 .env
+.env.e2e
 secrets/
 
 # dev db
