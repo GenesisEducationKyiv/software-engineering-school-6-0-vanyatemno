@@ -80,3 +80,4 @@ GitHub Actions runs each suite in its own workflow on every push to `main` and e
 
 - `.github/workflows/unit-tests.yml` → `make test-unit`
 - `.github/workflows/integration-tests.yml` → `make test-integration`
+- `.github/workflows/e2e-tests.yml` → `make test-e2e` (uses the runner's auto-provisioned `GITHUB_TOKEN` for the live GitHub API calls)

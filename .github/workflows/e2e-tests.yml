@@ -1,0 +1,29 @@
+name: e2e-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Write .env.e2e
+        run: |
+          cp .env.e2e.example .env.e2e
+          sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}|" .env.e2e
+
+      - name: Run e2e tests
+        run: make test-e2e
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: docker compose --env-file .env.e2e -f docker-compose.e2e.yml logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v
