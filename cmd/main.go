@@ -7,6 +7,7 @@ import (
 	"se-school/internal/controllers"
 	cronScheduler "se-school/internal/cron"
 	"se-school/internal/infrastructure/db"
+	"se-school/internal/infrastructure/logging"
 	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
 	"se-school/internal/notifications"
@@ -36,19 +37,20 @@ import (
 //	@description				API key passed in the X-API-Key header
 
 func main() {
-	logger, err := zap.NewProduction()
+	cfg, err := config.Read()
+	if err != nil {
+		log.Fatalf("failed to read config: %v", err)
+	}
+
+	logger, err := logging.Init(&cfg.Log)
 	if err != nil {
 		log.Fatalf("failed to init logger: %v", err)
 	}
 	zap.ReplaceGlobals(logger)
+	defer func() { _ = logger.Sync() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	cfg, err := config.Read()
-	if err != nil {
-		zap.L().Fatal("failed to read config", zap.Error(err))
-	}
 
 	database, err := db.Connect(&cfg.Database)
 	if err != nil {
@@ -102,8 +104,10 @@ func main() {
 	// Controllers
 	subscriptionController := controllers.NewSubscriptionController(subscriptionService)
 
-	// Router
-	r := gin.Default()
+	// Router. gin.New() (not gin.Default()) is used so request logging and
+	// recovery go through our structured zap middlewares instead of Gin's
+	// default plain-text logger, keeping the whole log stream JSON.
+	r := gin.New()
 	controllers.RegisterRoutes(r, subscriptionController, &cfg.Application)
 
 	port := cfg.Application.Port

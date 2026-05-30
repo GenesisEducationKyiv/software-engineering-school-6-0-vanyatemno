@@ -33,3 +33,19 @@ test-e2e:
 
 test-e2e-down:
 	docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v
+
+# -- Logging pipeline (Elasticsearch + Kibana + Filebeat) ----------------------
+
+LOGGING_COMPOSE := -f docker-compose.yml -f docker-compose.logging.yml
+
+# Bring up the app together with the Elasticsearch/Kibana/Filebeat stack.
+logging-up:
+	docker compose $(LOGGING_COMPOSE) up --build -d
+
+# Tear the logging stack down (add `-v` manually to also drop the ES volume).
+logging-down:
+	docker compose $(LOGGING_COMPOSE) down
+
+# Follow the logs of the pipeline components.
+logging-logs:
+	docker compose $(LOGGING_COMPOSE) logs -f filebeat elasticsearch kibana

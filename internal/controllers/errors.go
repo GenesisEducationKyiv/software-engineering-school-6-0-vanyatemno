@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"se-school/internal/infrastructure/db"
+	"se-school/internal/infrastructure/logging"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/go-github/v84/github"
@@ -26,6 +27,6 @@ func handleServiceError(c *gin.Context, err error) {
 		return
 	}
 
-	zap.L().Error("unhandled service error", zap.Error(err))
+	logging.FromContext(c.Request.Context()).Error("unhandled service error", zap.Error(err))
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 }

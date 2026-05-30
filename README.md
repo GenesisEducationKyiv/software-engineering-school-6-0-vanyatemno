@@ -111,6 +111,9 @@ docker compose down
 | `make dependencies` | `go mod tidy` + `go mod download` |
 | `make lint` | Run `golangci-lint` (auto-installs if missing) |
 | `make swagger` | Regenerate Swagger docs from annotations into `docs/generated/` |
+| `make logging-up` | Start the app together with the Elasticsearch + Kibana + Filebeat stack |
+| `make logging-down` | Stop the logging stack (append `-v` manually to also drop the ES volume) |
+| `make logging-logs` | Follow the logs of Filebeat / Elasticsearch / Kibana |
 
 ### Git hooks (Lefthook)
 
@@ -119,6 +122,111 @@ Pre-commit hooks run **linting** and **Swagger docs regeneration** in parallel. 
 ```bash
 go run github.com/evilmartians/lefthook/v2 install
 ```
+
+---
+
+## Structured Logging & Log Pipeline (Elasticsearch + Kibana)
+
+The service emits **structured JSON logs** (via [zap](https://go.uber.org/zap)) and ships
+them through a local **Filebeat → Elasticsearch → Kibana** pipeline for search and
+aggregation.
+
+> ⚠️ This stack is for **local development** only. A production Elasticsearch
+> cluster should be provisioned through your DevOps/IT team.
+
+### How it works
+
+```mermaid
+graph LR
+    A[Backend<br/>zap JSON to stdout] --> B[Docker json-file logs]
+    B -->|autodiscover label logging=app| C[Filebeat]
+    C --> D[(Elasticsearch<br/>app-logs-*)]
+    D --> E[Kibana<br/>search / dashboards]
+```
+
+- The app writes one JSON object per line to **stdout** using
+  [ECS](https://www.elastic.co/guide/en/ecs/current/index.html)-friendly field names
+  (`@timestamp`, `log.level`, `message`, `service.name`, `http.request.method`, …).
+- Every HTTP request is tagged with a correlation **`request_id`** (returned in the
+  `X-Request-ID` response header and reusable on the way in) so related log lines can be
+  traced together.
+- Docker captures stdout via the `json-file` driver. **Filebeat** autodiscovers only the
+  container labelled `logging: "app"`, decodes the JSON, and ships it to Elasticsearch
+  under daily indices `app-logs-YYYY.MM.dd`.
+- **Kibana** queries those indices for ad-hoc search (Discover) and dashboards.
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `LOG_ENCODING` | `json` | `json` for the pipeline, `console` for human-readable local dev |
+| `LOG_ENVIRONMENT` | `development` | Tags every log with `service.environment` |
+| `LOG_SERVICE_NAME` | `se-school` | Tags every log with `service.name` |
+| `LOG_VERSION` | `dev` | Tags every log with `service.version` |
+
+### Run the pipeline
+
+```bash
+# Brings up postgres + redis + backend + elasticsearch + kibana + filebeat
+make logging-up
+
+# Follow the pipeline components (optional)
+make logging-logs
+```
+
+Endpoints once it's up:
+
+- Backend / Swagger: `http://localhost:8080/swagger/index.html`
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+
+Generate some traffic so there are logs to look at:
+
+```bash
+curl -H "X-API-Key: $SERVER_API_KEY" "http://localhost:8080/api/subscriptions?email=test@example.com"
+curl "http://localhost:8080/swagger/index.html"
+```
+
+Confirm logs reached Elasticsearch:
+
+```bash
+curl "http://localhost:9200/_cat/indices/app-logs-*?v"
+curl "http://localhost:9200/app-logs-*/_search?size=1&pretty"
+```
+
+### Set up Kibana (one-time, manual)
+
+1. Open **http://localhost:5601**.
+2. Go to **Stack Management → Data Views → Create data view**.
+   - **Name**: `app-logs`
+   - **Index pattern**: `app-logs-*`
+   - **Timestamp field**: `@timestamp`
+   - Save.
+3. Open **Discover**, pick the `app-logs-*` data view, and explore. Useful
+   [KQL](https://www.elastic.co/guide/en/kibana/current/kuery-query.html) filters:
+   - `log.level: "error"` — only errors
+   - `http.response.status_code >= 400` — failing requests
+   - `request_id: "<id>"` — every line for one request (copy the `X-Request-ID` header)
+   - `service.name: "se-school" and message: "http request"` — access log
+4. Build visualizations (**Dashboard → Create → Create visualization**), e.g.:
+   - **Log volume by level**: a bar chart over `@timestamp` split by `log.level`.
+   - **Top errors**: a data table of `message` filtered to `log.level: "error"`.
+   - **Request latency**: average/percentile of `event.duration` (milliseconds) over time.
+   - **Slowest endpoints**: `event.duration` aggregated by `url.path`.
+   Save them to a dashboard.
+
+### Tear down
+
+```bash
+make logging-down          # keep the Elasticsearch volume
+# or, to also delete indexed logs:
+docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
+```
+
+> On Linux, Elasticsearch may require a higher `vm.max_map_count`:
+> `sudo sysctl -w vm.max_map_count=262144`. Docker Desktop (macOS/Windows) handles this
+> automatically.
 
 ---
 
@@ -134,13 +242,15 @@ go run github.com/evilmartians/lefthook/v2 install
 ├── internal/
 │   ├── config/                          # Configuration structs & .env loader (Viper)
 │   ├── controllers/                     # HTTP handlers (Gin) & route registration
-│   │   ├── middlewares/                 # CORS and API-key middlewares
+│   │   ├── middlewares/                 # CORS, API-key, metrics & structured-logging middlewares
 │   │   ├── router.go                   # Route definitions
 │   │   ├── subscription.go             # Subscription endpoint handlers
 │   │   └── errors.go                   # Centralised HTTP error mapping
 │   ├── cron/                            # Cron scheduler (robfig/cron)
 │   ├── infrastructure/
-│   │   └── db/                          # GORM database connection & auto-migration
+│   │   ├── db/                          # GORM database connection & auto-migration
+│   │   ├── logging/                     # Structured zap logger + request-scoped context helpers
+│   │   └── redis/                       # Redis client connection
 │   ├── integrations/
 │   │   └── github/                      # GitHub API client (go-github)
 │   ├── models/                          # GORM domain models & DTOs
@@ -160,9 +270,13 @@ go run github.com/evilmartians/lefthook/v2 install
 │   │   ├── repository/                 # Release-check & notification dispatch
 │   │   └── subscription/               # Subscribe / confirm / unsubscribe / list
 │   └── utils/                           # Shared helpers (e.g. code generation)
+├── deploy/
+│   └── logging/
+│       └── filebeat.yml                 # Filebeat autodiscover + Elasticsearch output config
 ├── .env.example                         # Environment variable template
 ├── .golangci.yml                        # Linter configuration
 ├── docker-compose.yml                   # Docker Compose (backend + postgres)
+├── docker-compose.logging.yml           # Overlay: Elasticsearch + Kibana + Filebeat pipeline
 ├── Dockerfile                           # Multi-stage Docker build
 ├── lefthook.yml                         # Git hook definitions
 ├── Makefile                             # Build / lint / swagger targets

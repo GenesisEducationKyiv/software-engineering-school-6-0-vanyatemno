@@ -18,6 +18,9 @@ import (
 // Swagger UI is served at /swagger/*any.
 // Prometheus metrics are served at /metrics.
 func RegisterRoutes(r *gin.Engine, sc *SubscriptionController, cfg *config.Application) {
+	r.Use(middlewares.RequestID())
+	r.Use(middlewares.RequestLogger())
+	r.Use(middlewares.Recovery())
 	r.Use(middlewares.CORSMiddleware())
 	r.Use(middlewares.PrometheusMiddleware())
 
