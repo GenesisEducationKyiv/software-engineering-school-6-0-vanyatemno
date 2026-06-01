@@ -15,6 +15,29 @@ volumes:
   elasticsearch_data:
 
 services:
+  # The base compose file's postgres service doesn't set credentials, so the
+  # container refuses to initialize. Supply them here (from .env) so the whole
+  # logging stack comes up self-contained via `make logging-up`.
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      github-subscriptions:
+        aliases:
+          - redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     # The label Filebeat's autodiscover rule keys off of.
     labels:
@@ -24,6 +47,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    ports:
+      - '${SERVER_PORT}:${SERVER_PORT}'
     # Override host-oriented .env values so the container talks to the
     # in-network services and emits JSON logs for the pipeline.
     environment:
@@ -34,6 +59,9 @@ services:
       LOG_ENCODING: "json"
       LOG_ENVIRONMENT: "docker"
       LOG_SERVICE_NAME: "se-school"
+    depends_on:
+      - redis
+      - postgres
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
@@ -64,7 +92,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.15.3
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=http://elasticsearch.software-engineering-school-6-0-vanyatemno.orb.local:9200
     ports:
       - "5601:5601"
     depends_on:

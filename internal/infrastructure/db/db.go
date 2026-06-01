@@ -9,7 +9,12 @@ import (
 )
 
 func Connect(cfg *config.Database) (*gorm.DB, error) {
-	database, err := gorm.Open(postgres.Open(cfg.DNS), &gorm.Config{})
+	database, err := gorm.Open(postgres.Open(cfg.DNS), &gorm.Config{
+		// Route GORM's query/error logs through zap so they're emitted as JSON
+		// the Filebeat -> Elasticsearch pipeline can parse, instead of GORM's
+		// default colorized plain text.
+		Logger: newGormLogger(),
+	})
 	if err != nil {
 		return nil, err
 	}

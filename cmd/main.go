@@ -49,6 +49,13 @@ func main() {
 	zap.ReplaceGlobals(logger)
 	defer func() { _ = logger.Sync() }()
 
+	// In JSON (pipeline) mode, switch Gin to release so it stops printing its
+	// plain-text "[GIN-debug] ..." banner to stdout — those lines aren't JSON and
+	// would otherwise show up in Elasticsearch as failed-to-decode records.
+	if cfg.Log.Encoding != "console" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

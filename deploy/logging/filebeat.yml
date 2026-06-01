@@ -26,7 +26,12 @@ filebeat.autodiscover:
               # the nested objects Elasticsearch expects.
               json.keys_under_root: true
               json.overwrite_keys: true
-              json.add_error_key: true
+              # add_error_key is left OFF on purpose: when a line fails to decode
+              # it would inject an "error" *object* (error.message/error.type),
+              # which clashes with the scalar "error" string the app emits via
+              # zap.Error and breaks the Elasticsearch field mapping. The app now
+              # emits 100% JSON, so a decode error shouldn't happen anyway.
+              json.add_error_key: false
               json.expand_keys: true
 
 # Enrich every event with Docker container metadata (name, image, id) so logs
@@ -39,12 +44,18 @@ output.elasticsearch:
   # Daily index; the Kibana data view `app-logs-*` matches this pattern.
   index: "app-logs-%{+yyyy.MM.dd}"
 
-# A custom index name requires disabling the default index-lifecycle policy and
-# registering a matching index template.
+# A custom index name requires disabling the default index-lifecycle policy.
 setup.ilm.enabled: false
-setup.template.name: "app-logs"
-setup.template.pattern: "app-logs-*"
-setup.template.overwrite: false
+
+# Do NOT install Filebeat's built-in ECS field template. That template maps
+# `log.origin` and `error` as OBJECTS, but our zap logger emits `log.origin` as a
+# "file:line" string and `error` as a scalar string (zap.Error). With the ECS
+# template in place, every successfully-decoded app document is rejected with
+# `object mapping for [log.origin] tried to parse field as object, but found a
+# concrete value` (HTTP 400) and silently dropped — the harvester runs but the
+# index stays empty. Disabling the template lets Elasticsearch infer field types
+# dynamically from the JSON we actually emit.
+setup.template.enabled: false
 
 # Kibana endpoint (used by `filebeat setup` if you ever load assets via Filebeat).
 setup.kibana:

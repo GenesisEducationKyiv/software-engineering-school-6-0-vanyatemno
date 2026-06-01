@@ -67,7 +67,10 @@ func RequestLogger() gin.HandlerFunc {
 		}
 
 		if len(c.Errors) > 0 {
-			fields = append(fields, zap.String("error.message", c.Errors.String()))
+			// Scalar "error" to stay consistent with zap.Error(err) elsewhere;
+			// see the StacktraceKey note in logging.Init for why "error" must not
+			// become an object (error.message/error.stack_trace).
+			fields = append(fields, zap.String("error", c.Errors.String()))
 		}
 
 		logger := logging.FromContext(c.Request.Context())

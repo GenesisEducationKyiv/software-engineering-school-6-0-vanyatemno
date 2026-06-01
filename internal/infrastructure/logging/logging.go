@@ -37,17 +37,21 @@ func Init(cfg *config.Log) (*zap.Logger, error) {
 	}
 
 	encoderCfg := zapcore.EncoderConfig{
-		TimeKey:        "@timestamp",
-		LevelKey:       "log.level",
-		NameKey:        "log.logger",
-		CallerKey:      "log.origin",
-		MessageKey:     "message",
-		StacktraceKey:  "error.stack_trace",
+		TimeKey:    "@timestamp",
+		LevelKey:   "log.level",
+		NameKey:    "log.logger",
+		CallerKey:  "log.origin",
+		MessageKey: "message",
+		// Stacktraces live under a top-level "stacktrace" key, NOT under the
+		// "error." namespace. zap.Error(err) emits a *scalar* "error" string, so
+		// putting the stacktrace at "error.stack_trace" would make "error" both a
+		// string and an object — which breaks Filebeat's json.expand_keys and
+		// Elasticsearch's dotted-field mapping ("cannot expand error.stack_trace:
+		// expected map but type is string"). Keeping it flat avoids that clash and
+		// matches the Recovery middleware, which already logs zap.Stack("stacktrace").
+		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
 		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		// RFC3339Nano produces strict RFC3339 timestamps (colon in the zone
-		// offset, e.g. 2026-05-30T12:34:56.789Z) which Elasticsearch maps as a
-		// date out of the box. ISO8601 would emit "+0000" and break date mapping.
 		EncodeTime:     zapcore.RFC3339NanoTimeEncoder,
 		EncodeDuration: zapcore.MillisDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
