@@ -49,7 +49,7 @@ func (sc *SubscriptionController) Subscribe(c *gin.Context) {
 
 	err = sc.subscriptionService.Create(c.Request.Context(), &req)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -76,9 +76,9 @@ func (sc *SubscriptionController) Confirm(c *gin.Context) {
 		return
 	}
 
-	err := sc.subscriptionService.Confirm(&req)
+	err := sc.subscriptionService.Confirm(c.Request.Context(), &req)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -105,9 +105,9 @@ func (sc *SubscriptionController) Unsubscribe(c *gin.Context) {
 		return
 	}
 
-	err := sc.subscriptionService.Unsubscribe(&req)
+	err := sc.subscriptionService.Unsubscribe(c.Request.Context(), &req)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -133,9 +133,9 @@ func (sc *SubscriptionController) GetSubscriptions(c *gin.Context) {
 		return
 	}
 
-	subscriptions, err := sc.subscriptionService.ListByEmail(&req)
+	subscriptions, err := sc.subscriptionService.ListByEmail(c.Request.Context(), &req)
 	if err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 

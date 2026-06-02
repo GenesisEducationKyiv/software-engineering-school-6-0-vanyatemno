@@ -25,3 +25,7 @@ secrets/
 
 # dev db
 data/
+
+# AI
+.claude/*
+CLAUDE.md

@@ -17,12 +17,12 @@ func (s *Service) CheckRepoTagAndAlert(ctx context.Context, repo *models.Reposit
 	if currentVersion == repo.Version {
 		return nil
 	}
-	repo, err = s.repositoriesRepository.UpdateTag(repo.ID, currentVersion)
+	repo, err = s.repositoriesRepository.UpdateTag(ctx, repo.ID, currentVersion)
 	if err != nil {
 		zap.L().Error("failed to update repository version", zap.Error(err))
 		return err
 	}
-	err = s.sendRepositoryNotificationUpdates(repo)
+	err = s.sendRepositoryNotificationUpdates(ctx, repo)
 	if err != nil {
 		zap.L().Error("failed to send repository notification updates", zap.Error(err))
 	}
@@ -30,8 +30,8 @@ func (s *Service) CheckRepoTagAndAlert(ctx context.Context, repo *models.Reposit
 	return nil
 }
 
-func (s *Service) sendRepositoryNotificationUpdates(repo *models.Repository) error {
-	subs, err := s.subscriptionsRepository.GetUnupdated(repo.ID, repo.Version)
+func (s *Service) sendRepositoryNotificationUpdates(ctx context.Context, repo *models.Repository) error {
+	subs, err := s.subscriptionsRepository.GetUnupdated(ctx, repo.ID, repo.Version)
 	zap.L().Debug("found unupdated subscriptions", zap.Int("subscriptions_count", len(subs)))
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (s *Service) sendUpdates(repo *models.Repository, subs []*models.Subscripti
 }
 
 func (s *Service) CheckAllReposTagAndAlert(ctx context.Context) error {
-	repos, err := s.repositoriesRepository.GetAll()
+	repos, err := s.repositoriesRepository.GetAll(ctx)
 	if err != nil {
 		zap.L().Error("failed to fetch all repositories", zap.Error(err))
 		return err

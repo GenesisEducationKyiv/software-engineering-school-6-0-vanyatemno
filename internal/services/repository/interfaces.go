@@ -1,18 +1,10 @@
-package subscription
+package repository
 
 import (
 	"context"
 	"se-school/internal/models"
 	"se-school/internal/notifications/templates"
 )
-
-type NotificationsService interface {
-	SendEmail(receivers []string, template templates.TemplateName, data any) error
-}
-
-type GithubIntegration interface {
-	GetRepositoryVersion(ctx context.Context, owner, repositoryName string) (string, error)
-}
 
 type CodesRepository interface {
 	Get(ctx context.Context, code string) (*models.Code, error)
@@ -43,4 +35,12 @@ type SubscriptionsRepository interface {
 	UpdateLastSeenTag(ctx context.Context, id uint, tag string) error
 	Save(ctx context.Context, subscription *models.Subscription) error
 	Delete(ctx context.Context, subscription *models.Subscription) error
+}
+
+type NotificationsService interface {
+	SendEmail(receivers []string, template templates.TemplateName, data any) error
+}
+
+type GithubIntegration interface {
+	GetRepositoryVersion(ctx context.Context, owner, repositoryName string) (string, error)
 }
