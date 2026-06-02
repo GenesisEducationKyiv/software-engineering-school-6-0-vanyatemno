@@ -1,36 +1,71 @@
 package repository
 
-import "se-school/internal/models"
+import (
+	"context"
+	"errors"
+	"se-school/internal/models"
+	"se-school/internal/repositories"
 
-func (r *Repository) Create(repository *models.Repository) error {
-	return r.db.Create(repository).Error
+	"github.com/jackc/pgx/v5"
+)
+
+func (r *Repository) Create(ctx context.Context, repository *models.Repository) error {
+	row := r.db.QueryRow(ctx,
+		`INSERT INTO repositories (owner, name, version)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, created_at, updated_at`,
+		repository.Owner, repository.Name, repository.Version,
+	)
+	return row.Scan(&repository.ID, &repository.CreatedAt, &repository.UpdatedAt)
 }
 
-func (r *Repository) UpdateTag(id uint, tag string) (*models.Repository, error) {
-	repository, err := r.GetByID(id)
+func (r *Repository) UpdateTag(ctx context.Context, id uint, tag string) (*models.Repository, error) {
+	row := r.db.QueryRow(ctx,
+		`UPDATE repositories
+		 SET version = $1, updated_at = NOW()
+		 WHERE id = $2 AND deleted_at IS NULL
+		 RETURNING `+repositoryColumns,
+		tag, id,
+	)
+	repo, err := scanRepository(row)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
-	repository.Version = tag
-	// todo: rewrite to lighter implementation
-
-	return repository, r.db.Save(repository).Error
+	return repo, nil
 }
 
-func (r *Repository) Delete(repository *models.Repository) error {
-	repository, err := r.GetByID(repository.ID)
+func (r *Repository) Delete(ctx context.Context, repository *models.Repository) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE repositories SET deleted_at = NOW(), updated_at = NOW()
+		 WHERE id = $1 AND deleted_at IS NULL`,
+		repository.ID,
+	)
 	if err != nil {
 		return err
 	}
-
-	return r.db.Delete(repository).Error
+	if tag.RowsAffected() == 0 {
+		return repositories.ErrNotFound
+	}
+	return nil
 }
 
-func (r *Repository) FindOrCreate(repository *models.Repository) (*models.Repository, error) {
-	err := r.db.FirstOrCreate(repository).Error
-	if err != nil {
+// FindOrCreate returns the existing row matching (owner, name) or inserts a
+// new row with the supplied values. The struct is mutated in place to reflect
+// the persisted state (ID, timestamps, version).
+func (r *Repository) FindOrCreate(ctx context.Context, repository *models.Repository) (*models.Repository, error) {
+	found, err := r.Find(ctx, repository)
+	if err == nil {
+		return found, nil
+	}
+	if !errors.Is(err, repositories.ErrNotFound) {
 		return nil, err
 	}
 
+	if err := r.Create(ctx, repository); err != nil {
+		return nil, err
+	}
 	return repository, nil
 }
