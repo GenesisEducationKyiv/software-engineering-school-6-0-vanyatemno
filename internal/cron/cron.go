@@ -3,7 +3,6 @@ package cron
 import (
 	"context"
 	"se-school/internal/config"
-	repositorySvc "se-school/internal/services/repository"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
@@ -12,11 +11,11 @@ import (
 type Scheduler struct {
 	appCtx            context.Context
 	cron              *cron.Cron
-	repositoryService *repositorySvc.Service
+	repositoryService RepositoriesService
 }
 
 // New creates a new Scheduler and registers all cron jobs based on the provided config.
-func New(appCtx context.Context, cfg *config.Cron, repositoryService *repositorySvc.Service) *Scheduler {
+func New(appCtx context.Context, cfg *config.Cron, repositoryService RepositoriesService) *Scheduler {
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(zap.NewStdLog(zap.L()))))
 
 	s := &Scheduler{

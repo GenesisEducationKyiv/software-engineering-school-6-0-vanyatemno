@@ -7,7 +7,6 @@ import (
 	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/internal/notifications/templates"
-	"se-school/internal/repositories"
 	"strings"
 
 	"go.uber.org/zap"
@@ -51,12 +50,18 @@ func (s *Service) createNewSubscription(
 		return nil, err
 	}
 
-	unsubCode, err := s.codesRepository.Create(ctx, models.CodeTypeUnsubscribe)
+	unsubCode, err := s.codeFactory.New(models.CodeTypeUnsubscribe)
 	if err != nil {
 		return nil, err
 	}
-	subCode, err := s.codesRepository.Create(ctx, models.CodeTypeConfirm)
+	if err := s.codesRepository.Create(ctx, unsubCode); err != nil {
+		return nil, err
+	}
+	subCode, err := s.codeFactory.New(models.CodeTypeConfirm)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.codesRepository.Create(ctx, subCode); err != nil {
 		return nil, err
 	}
 
@@ -98,7 +103,7 @@ func (s *Service) getOrCreateRepository(ctx context.Context, values *parsedRepoV
 		Name:  values.RepositoryName,
 	})
 	if err != nil {
-		if !errors.Is(err, repositories.ErrNotFound) {
+		if !errors.Is(err, models.ErrNotFound) {
 			return nil, err
 		}
 		repository, err = s.createRepository(ctx, values)
@@ -132,7 +137,7 @@ func (s *Service) sendConfirmationCode(sub *models.Subscription) error {
 	err := s.notificationService.SendEmail(
 		[]string{sub.Email},
 		templates.Confirmation,
-		templates.BuildConfirmEmailPayload(s.cfg, sub.SubscribeCode.Code),
+		templates.BuildConfirmEmailPayload(s.frontendURL, sub.SubscribeCode.Code),
 	)
 	if err != nil {
 		return err

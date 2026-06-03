@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,29 +35,23 @@ func (r *Repository) Get(ctx context.Context, codeString string) (*models.Code, 
 	c, err := scanCode(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}
 	return c, nil
 }
 
-func (r *Repository) Create(ctx context.Context, codeType models.CodeType) (*models.Code, error) {
-	code := models.Code{Type: codeType}
-	if err := r.setupCode(&code); err != nil {
-		return nil, err
-	}
-
+// Create persists a code that was already built by the codes factory. Generation and
+// expiration live in the factory (SRP); the repository only handles data access.
+func (r *Repository) Create(ctx context.Context, code *models.Code) error {
 	row := r.db.QueryRow(ctx,
 		`INSERT INTO codes (code, type, expires_at)
 		 VALUES ($1, $2, $3)
 		 RETURNING id, created_at, updated_at`,
 		code.Code, code.Type, code.ExpiresAt,
 	)
-	if err := row.Scan(&code.ID, &code.CreatedAt, &code.UpdatedAt); err != nil {
-		return nil, err
-	}
-	return &code, nil
+	return row.Scan(&code.ID, &code.CreatedAt, &code.UpdatedAt)
 }
 
 func (r *Repository) Delete(ctx context.Context, id uint) error {

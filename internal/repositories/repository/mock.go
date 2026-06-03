@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 )
 
 type RepositoriesRepositoryMock struct {
@@ -62,7 +61,7 @@ func (m *RepositoriesRepositoryMock) Find(_ context.Context, repo *models.Reposi
 			return r, nil
 		}
 	}
-	return nil, repositories.ErrNotFound
+	return nil, models.ErrNotFound
 }
 
 func (m *RepositoriesRepositoryMock) Create(_ context.Context, repo *models.Repository) error {

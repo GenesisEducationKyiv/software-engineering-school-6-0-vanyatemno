@@ -2,8 +2,8 @@ package subscription
 
 import (
 	"context"
+	"se-school/internal/infrastructure/db"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 )
 
 func (r *Repository) Create(ctx context.Context, subscription *models.Subscription) error {
@@ -21,7 +21,13 @@ func (r *Repository) Create(ctx context.Context, subscription *models.Subscripti
 		subscription.LastSeenTag,
 	)
 
-	return row.Scan(&subscription.ID, &subscription.CreatedAt, &subscription.UpdatedAt)
+	if err := row.Scan(&subscription.ID, &subscription.CreatedAt, &subscription.UpdatedAt); err != nil {
+		if db.IsDuplicateKeyError(err) {
+			return models.ErrAlreadyExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *Repository) UpdateLastSeenTag(ctx context.Context, id uint, tag string) error {
@@ -35,7 +41,7 @@ func (r *Repository) UpdateLastSeenTag(ctx context.Context, id uint, tag string)
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		return repositories.ErrNotFound
+		return models.ErrNotFound
 	}
 
 	return nil
@@ -66,7 +72,7 @@ func (r *Repository) Save(ctx context.Context, subscription *models.Subscription
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		return repositories.ErrNotFound
+		return models.ErrNotFound
 	}
 
 	return nil

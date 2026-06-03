@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -30,7 +29,7 @@ func (r *Repository) UpdateTag(ctx context.Context, id uint, tag string) (*model
 	repo, err := scanRepository(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}
@@ -47,7 +46,7 @@ func (r *Repository) Delete(ctx context.Context, repository *models.Repository) 
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return repositories.ErrNotFound
+		return models.ErrNotFound
 	}
 	return nil
 }
@@ -60,7 +59,7 @@ func (r *Repository) FindOrCreate(ctx context.Context, repository *models.Reposi
 	if err == nil {
 		return found, nil
 	}
-	if !errors.Is(err, repositories.ErrNotFound) {
+	if !errors.Is(err, models.ErrNotFound) {
 		return nil, err
 	}
 

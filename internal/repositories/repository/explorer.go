@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -25,7 +24,7 @@ func (r *Repository) GetByID(ctx context.Context, id uint) (*models.Repository, 
 	repo, err := scanRepository(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}
@@ -43,7 +42,7 @@ func (r *Repository) Find(ctx context.Context, repo *models.Repository) (*models
 	found, err := scanRepository(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}

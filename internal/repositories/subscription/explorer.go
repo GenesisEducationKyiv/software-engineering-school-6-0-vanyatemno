@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"se-school/internal/models"
-	"se-school/internal/repositories"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -30,7 +29,7 @@ func (r *Repository) GetByID(ctx context.Context, id uint) (*models.Subscription
 	sub, err := scanSubscription(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}
@@ -122,7 +121,7 @@ func (r *Repository) GetByCode(ctx context.Context, codeID uint, codeType models
 	sub, err := scanSubscription(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, repositories.ErrNotFound
+			return nil, models.ErrNotFound
 		}
 		return nil, err
 	}

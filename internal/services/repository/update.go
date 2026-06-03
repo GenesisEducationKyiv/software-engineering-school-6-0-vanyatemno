@@ -49,7 +49,7 @@ func (s *Service) sendUpdates(repo *models.Repository, subs []*models.Subscripti
 	for _, sub := range subs {
 		emails = append(emails, sub.Email)
 	}
-	payload := templates.BuildRepositoryUpdateEmailPayload(s.cfg, repo)
+	payload := templates.BuildRepositoryUpdateEmailPayload(s.frontendURL, repo)
 
 	zap.L().Debug(
 		"sending repository update email payload",
