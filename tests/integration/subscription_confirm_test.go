@@ -14,7 +14,7 @@ func TestConfirm_ValidToken_FlipsFlagAndDropsConfirmCode(t *testing.T) {
 	confirmCodeID := sub.SubscribeCode.ID
 	unsubCodeID := sub.UnsubscribeCode.ID
 
-	err := s.Svc.Confirm(&dto.ConfirmSubscriptionRequest{Token: sub.SubscribeCode.Code})
+	err := s.Svc.Confirm(s.Ctx, &dto.ConfirmSubscriptionRequest{Token: sub.SubscribeCode.Code})
 	if err != nil {
 		t.Fatalf("Confirm: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestConfirm_InvalidToken_ReturnsErrorAndLeavesSubscriptionUntouched(t *test
 
 	sub := s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", false)
 
-	err := s.Svc.Confirm(&dto.ConfirmSubscriptionRequest{Token: "this-token-does-not-exist"})
+	err := s.Svc.Confirm(s.Ctx, &dto.ConfirmSubscriptionRequest{Token: "this-token-does-not-exist"})
 	if err == nil {
 		t.Fatal("expected error for unknown confirm token, got nil")
 	}
@@ -57,11 +57,11 @@ func TestConfirm_ReusedToken_SecondCallFails(t *testing.T) {
 	sub := s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", false)
 	token := sub.SubscribeCode.Code
 
-	if err := s.Svc.Confirm(&dto.ConfirmSubscriptionRequest{Token: token}); err != nil {
+	if err := s.Svc.Confirm(s.Ctx, &dto.ConfirmSubscriptionRequest{Token: token}); err != nil {
 		t.Fatalf("first Confirm: %v", err)
 	}
 
-	err := s.Svc.Confirm(&dto.ConfirmSubscriptionRequest{Token: token})
+	err := s.Svc.Confirm(s.Ctx, &dto.ConfirmSubscriptionRequest{Token: token})
 	if err == nil {
 		t.Fatal("expected error reusing already-consumed confirm token, got nil")
 	}

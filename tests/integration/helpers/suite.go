@@ -2,24 +2,22 @@ package helpers
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"se-school/internal/config"
+	dbinfra "se-school/internal/infrastructure/db"
 	"se-school/internal/integrations/github"
-	"se-school/internal/models"
+	codesFactory "se-school/internal/models/factories/codes"
 	"se-school/internal/notifications"
 	codeRepo "se-school/internal/repositories/code"
 	repoRepo "se-school/internal/repositories/repository"
 	subRepo "se-school/internal/repositories/subscription"
 	"se-school/internal/services/subscription"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type Suite struct {
@@ -27,7 +25,7 @@ type Suite struct {
 	Ctx context.Context
 
 	Cfg      *config.Config
-	DB       *gorm.DB
+	DB       *pgxpool.Pool
 	Redis    *redis.Client
 	GH       *MSWServer
 	Notifier *notifications.NotificationsServiceMock
@@ -36,6 +34,7 @@ type Suite struct {
 	SubRepo  *subRepo.Repository
 	RepoRepo *repoRepo.Repository
 	CodeRepo *codeRepo.Repository
+	Factory  *codesFactory.Factory
 }
 
 // NewSuite spins up a fully wired subscription service backed by real
@@ -51,11 +50,9 @@ func NewSuite(t *testing.T) *Suite {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	db := connectDB(t, dsn)
-	if err := migrate(db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	truncate(t, db)
+	pool := connectDB(t, dsn)
+	t.Cleanup(pool.Close)
+	truncate(t, pool)
 
 	rdb := connectRedis(t, ctx, redisAddr)
 	if err := rdb.FlushDB(ctx).Err(); err != nil {
@@ -76,15 +73,17 @@ func NewSuite(t *testing.T) *Suite {
 		t.Fatalf("github integration: %v", err)
 	}
 
-	subscriptionsRepo := subRepo.New(db)
-	repositoriesRepo := repoRepo.New(db)
-	codesRepo := codeRepo.New(db)
+	factory := codesFactory.NewFactory()
+	subscriptionsRepo := subRepo.New(pool)
+	repositoriesRepo := repoRepo.New(pool)
+	codesRepo := codeRepo.New(pool)
 
 	svc := subscription.New(
-		cfg,
+		cfg.FrontendURL,
 		subscriptionsRepo,
 		repositoriesRepo,
 		codesRepo,
+		factory,
 		githubSvc,
 		notifier,
 	)
@@ -93,7 +92,7 @@ func NewSuite(t *testing.T) *Suite {
 		T:        t,
 		Ctx:      ctx,
 		Cfg:      cfg,
-		DB:       db,
+		DB:       pool,
 		Redis:    rdb,
 		GH:       gh,
 		Notifier: notifier,
@@ -101,10 +100,11 @@ func NewSuite(t *testing.T) *Suite {
 		SubRepo:  subscriptionsRepo,
 		RepoRepo: repositoriesRepo,
 		CodeRepo: codesRepo,
+		Factory:  factory,
 	}
 
 	t.Cleanup(func() {
-		truncate(t, db)
+		truncate(t, pool)
 		_ = rdb.FlushDB(ctx).Err()
 	})
 	return s
@@ -119,19 +119,16 @@ func requireEnv(t *testing.T, key string) string {
 	return v
 }
 
-func connectDB(t *testing.T, dsn string) *gorm.DB {
+// connectDB opens a pgxpool through the production db.Connect helper, which
+// also applies the embedded migrations. It retries briefly so the suite is
+// resilient to Postgres still warming up inside docker-compose.
+func connectDB(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
-	var (
-		db  *gorm.DB
-		err error
-	)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+		pool, err := dbinfra.Connect(&config.Database{DNS: dsn})
 		if err == nil {
-			if sqlDB, e := db.DB(); e == nil && sqlDB.Ping() == nil {
-				return db
-			}
+			return pool
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("connect postgres: %v", err)
@@ -154,24 +151,11 @@ func connectRedis(t *testing.T, ctx context.Context, addr string) *redis.Client 
 	}
 }
 
-func migrate(db *gorm.DB) error {
-	for _, m := range []models.MigratableModel{
-		&models.Subscription{},
-		&models.Repository{},
-		&models.Code{},
-	} {
-		if err := m.Migrate(db); err != nil {
-			return fmt.Errorf("migrate %T: %w", m, err)
-		}
-	}
-	return nil
-}
-
-func truncate(t *testing.T, db *gorm.DB) {
+func truncate(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	// Codes have a FK reference from subscriptions; order matters even
-	// with TRUNCATE CASCADE because of the unique partial index.
-	if err := db.Exec(`TRUNCATE TABLE subscriptions, repositories, codes RESTART IDENTITY CASCADE`).Error; err != nil {
+	if _, err := pool.Exec(context.Background(),
+		`TRUNCATE TABLE subscriptions, repositories, codes RESTART IDENTITY CASCADE`,
+	); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 }

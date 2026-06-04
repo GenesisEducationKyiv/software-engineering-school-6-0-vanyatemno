@@ -1,15 +1,14 @@
 package models
 
-import "gorm.io/gorm"
+import "time"
 
 type Repository struct {
-	gorm.Model
+	ID        uint       `json:"ID"`
+	CreatedAt time.Time  `json:"CreatedAt"`
+	UpdatedAt time.Time  `json:"UpdatedAt"`
+	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 
-	Owner   string `gorm:"type:text;not null;index:idx_repository"`
-	Name    string `gorm:"type:text;not null;index:idx_repository"`
-	Version string `gorm:"type:text;not null" json:"version"`
-}
-
-func (r *Repository) Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(r)
+	Owner   string `json:"Owner"`
+	Name    string `json:"Name"`
+	Version string `json:"version"`
 }

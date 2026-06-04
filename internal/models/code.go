@@ -1,10 +1,6 @@
 package models
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
+import "time"
 
 type CodeType = string
 
@@ -14,13 +10,12 @@ const (
 )
 
 type Code struct {
-	gorm.Model
+	ID        uint       `json:"ID"`
+	CreatedAt time.Time  `json:"CreatedAt"`
+	UpdatedAt time.Time  `json:"UpdatedAt"`
+	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 
-	Code      string    `gorm:"text;not null;unique" json:"code"`
-	Type      CodeType  `gorm:"text;not null;index" json:"type"`
-	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
-}
-
-func (c *Code) Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(c)
+	Code      string    `json:"code"`
+	Type      CodeType  `json:"type"`
+	ExpiresAt time.Time `json:"expires_at"`
 }

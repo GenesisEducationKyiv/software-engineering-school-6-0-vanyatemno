@@ -1,13 +1,16 @@
 package repository
 
-import "se-school/internal/models"
+import (
+	"context"
+	"se-school/internal/models"
+)
 
 type RepositoriesRepository interface {
-	GetByID(uint) (*models.Repository, error)
-	GetAll() ([]*models.Repository, error)
-	Find(*models.Repository) (*models.Repository, error)
-	Create(*models.Repository) error
-	FindOrCreate(*models.Repository) (*models.Repository, error)
-	UpdateTag(id uint, tag string) (*models.Repository, error)
-	Delete(*models.Repository) error
+	GetByID(ctx context.Context, id uint) (*models.Repository, error)
+	GetAll(ctx context.Context) ([]*models.Repository, error)
+	Find(ctx context.Context, repo *models.Repository) (*models.Repository, error)
+	Create(ctx context.Context, repo *models.Repository) error
+	FindOrCreate(ctx context.Context, repo *models.Repository) (*models.Repository, error)
+	UpdateTag(ctx context.Context, id uint, tag string) (*models.Repository, error)
+	Delete(ctx context.Context, repo *models.Repository) error
 }

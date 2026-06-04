@@ -13,7 +13,7 @@ func TestList_MultipleSubscriptions_ReturnsAllWithRepository(t *testing.T) {
 	s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", true)
 	s.SeedSubscription(t, "user@example.com", "torvalds", "linux", "v6.10", false)
 
-	subs, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "user@example.com"})
+	subs, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "user@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail: %v", err)
 	}
@@ -22,11 +22,8 @@ func TestList_MultipleSubscriptions_ReturnsAllWithRepository(t *testing.T) {
 	}
 
 	for _, sub := range subs {
-		if sub.Repository == nil {
-			t.Fatalf("expected Repository to be preloaded for sub %d", sub.ID)
-		}
-		if sub.Repository.Owner == "" || sub.Repository.Name == "" {
-			t.Fatalf("expected Repository fields populated, got %+v", sub.Repository)
+		if sub.Repo == "" {
+			t.Fatalf("expected repo to be populated, got empty for %+v", sub)
 		}
 	}
 }
@@ -34,7 +31,7 @@ func TestList_MultipleSubscriptions_ReturnsAllWithRepository(t *testing.T) {
 func TestList_NoSubscriptions_ReturnsEmptySliceNoError(t *testing.T) {
 	s := helpers.NewSuite(t)
 
-	subs, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "ghost@example.com"})
+	subs, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "ghost@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail with no matches must not error, got %v", err)
 	}
@@ -50,7 +47,7 @@ func TestList_FiltersByEmail_DoesNotLeakOtherUsersSubscriptions(t *testing.T) {
 	s.SeedSubscription(t, "bob@example.com", "torvalds", "linux", "v6.10", true)
 	s.SeedSubscription(t, "bob@example.com", "golang", "go", "go1.23", false)
 
-	alice, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "alice@example.com"})
+	alice, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "alice@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail alice: %v", err)
 	}
@@ -61,7 +58,7 @@ func TestList_FiltersByEmail_DoesNotLeakOtherUsersSubscriptions(t *testing.T) {
 		t.Fatalf("expected alice's row, got email %q", alice[0].Email)
 	}
 
-	bob, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "bob@example.com"})
+	bob, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "bob@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail bob: %v", err)
 	}
@@ -81,7 +78,7 @@ func TestList_IncludesConfirmedAndUnconfirmed(t *testing.T) {
 	s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", true)
 	s.SeedSubscription(t, "user@example.com", "torvalds", "linux", "v6.10", false)
 
-	subs, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "user@example.com"})
+	subs, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "user@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail: %v", err)
 	}
@@ -91,7 +88,7 @@ func TestList_IncludesConfirmedAndUnconfirmed(t *testing.T) {
 
 	var sawConfirmed, sawUnconfirmed bool
 	for _, sub := range subs {
-		if sub.IsConfirmed {
+		if sub.Confirmed {
 			sawConfirmed = true
 		} else {
 			sawUnconfirmed = true
@@ -108,18 +105,18 @@ func TestList_ExcludesSoftDeletedSubscriptions(t *testing.T) {
 	sub := s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", true)
 	s.SeedSubscription(t, "user@example.com", "torvalds", "linux", "v6.10", true)
 
-	if err := s.Svc.Unsubscribe(&dto.UnsubscribeRequest{Token: sub.UnsubscribeCode.Code}); err != nil {
+	if err := s.Svc.Unsubscribe(s.Ctx, &dto.UnsubscribeRequest{Token: sub.UnsubscribeCode.Code}); err != nil {
 		t.Fatalf("seed unsubscribe: %v", err)
 	}
 
-	subs, err := s.Svc.ListByEmail(&dto.GetSubscriptionsRequest{Email: "user@example.com"})
+	subs, err := s.Svc.ListByEmail(s.Ctx, &dto.GetSubscriptionsRequest{Email: "user@example.com"})
 	if err != nil {
 		t.Fatalf("ListByEmail: %v", err)
 	}
 	if len(subs) != 1 {
 		t.Fatalf("expected soft-deleted row excluded, got %d rows", len(subs))
 	}
-	if subs[0].ID == sub.ID {
-		t.Fatalf("expected remaining row to differ from unsubscribed one, got %d", subs[0].ID)
+	if subs[0].Repo == "octocat/hello-world" {
+		t.Fatalf("expected remaining row to differ from unsubscribed one, got %q", subs[0].Repo)
 	}
 }
