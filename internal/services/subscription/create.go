@@ -57,11 +57,18 @@ func (s *Service) createNewSubscription(
 	if err := s.codesRepository.Create(ctx, unsubCode); err != nil {
 		return nil, err
 	}
+
 	subCode, err := s.codeFactory.New(models.CodeTypeConfirm)
 	if err != nil {
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
 		return nil, err
 	}
 	if err := s.codesRepository.Create(ctx, subCode); err != nil {
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
 		return nil, err
 	}
 
@@ -74,13 +81,16 @@ func (s *Service) createNewSubscription(
 		Email:             req.Email,
 		LastSeenTag:       repo.Version,
 	}
-	err = s.subscriptionsRepository.Create(ctx, sub)
-	if err != nil {
+	if err := s.subscriptionsRepository.Create(ctx, sub); err != nil {
 		zap.L().Error("failed to create subscription", zap.Error(err))
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
+		if delErr := s.codesRepository.Delete(ctx, subCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback subscribe code", zap.Error(delErr))
+		}
 		return nil, err
 	}
-	sub.SubscribeCode = subCode
-	sub.UnsubscribeCode = unsubCode
 
 	return sub, nil
 }
