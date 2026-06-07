@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func TestSmoke_PostgresReachable(t *testing.T) {
@@ -16,15 +15,16 @@ func TestSmoke_PostgresReachable(t *testing.T) {
 	if dsn == "" {
 		t.Fatal("TEST_DB_DSN not set")
 	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("db handle: %v", err)
-	}
-	if err := sqlDB.Ping(); err != nil {
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
 		t.Fatalf("ping db: %v", err)
 	}
 }

@@ -3,7 +3,6 @@ package integration
 import (
 	"testing"
 
-	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/tests/integration/helpers"
 )
@@ -15,17 +14,13 @@ func TestUnsubscribe_ValidToken_SoftDeletesSubAndDropsCodes(t *testing.T) {
 	confirmCodeID := sub.SubscribeCode.ID
 	unsubCodeID := sub.UnsubscribeCode.ID
 
-	err := s.Svc.Unsubscribe(&dto.UnsubscribeRequest{Token: sub.UnsubscribeCode.Code})
+	err := s.Svc.Unsubscribe(s.Ctx, &dto.UnsubscribeRequest{Token: sub.UnsubscribeCode.Code})
 	if err != nil {
 		t.Fatalf("Unsubscribe: %v", err)
 	}
 
 	// Soft-delete: row should be gone for the default scope.
-	var live int64
-	if err := s.DB.Model(&models.Subscription{}).Where("id = ?", sub.ID).Count(&live).Error; err != nil {
-		t.Fatalf("count live subscription: %v", err)
-	}
-	if live != 0 {
+	if live := s.CountLiveSubscriptionsByID(t, sub.ID); live != 0 {
 		t.Fatalf("expected subscription to be soft-deleted, found %d live rows", live)
 	}
 
@@ -43,7 +38,7 @@ func TestUnsubscribe_InvalidToken_LeavesSubscriptionInPlace(t *testing.T) {
 
 	sub := s.SeedSubscription(t, "user@example.com", "octocat", "hello-world", "v1.0.0", true)
 
-	err := s.Svc.Unsubscribe(&dto.UnsubscribeRequest{Token: "nonexistent-token"})
+	err := s.Svc.Unsubscribe(s.Ctx, &dto.UnsubscribeRequest{Token: "nonexistent-token"})
 	if err == nil {
 		t.Fatal("expected error for unknown unsubscribe token, got nil")
 	}
@@ -63,7 +58,7 @@ func TestUnsubscribe_ConfirmCodeRejected(t *testing.T) {
 
 	// Passing the confirmation token to Unsubscribe must not match: the
 	// service scopes the GetByCode lookup to code type Unsubscribe.
-	err := s.Svc.Unsubscribe(&dto.UnsubscribeRequest{Token: sub.SubscribeCode.Code})
+	err := s.Svc.Unsubscribe(s.Ctx, &dto.UnsubscribeRequest{Token: sub.SubscribeCode.Code})
 	if err == nil {
 		t.Fatal("expected error when passing confirm token to Unsubscribe, got nil")
 	}

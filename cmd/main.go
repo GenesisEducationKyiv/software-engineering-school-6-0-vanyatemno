@@ -10,6 +10,7 @@ import (
 	"se-school/internal/infrastructure/logging"
 	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
+	"se-school/internal/models/factories/codes"
 	"se-school/internal/notifications"
 	"se-school/internal/notifications/mailer"
 	"se-school/internal/notifications/templates"
@@ -63,6 +64,7 @@ func main() {
 	if err != nil {
 		zap.L().Fatal("failed to connect to database", zap.Error(err))
 	}
+	defer database.Close()
 
 	redisClient, err := redisInfra.Connect(ctx, &cfg.Redis)
 	if err != nil {
@@ -73,6 +75,9 @@ func main() {
 	subscriptionRepository := subRepo.New(database)
 	repositoryRepository := repoRepo.New(database)
 	codeRepository := codeRepo.New(database)
+
+	// Domain
+	codeFactory := codes.NewFactory()
 
 	// Integrations
 	githubIntegration, err := github.New(&cfg.Github, redisClient)
@@ -88,16 +93,17 @@ func main() {
 
 	// Services
 	subscriptionService := subscriptionSvc.New(
-		cfg,
+		cfg.FrontendURL,
 		subscriptionRepository,
 		repositoryRepository,
 		codeRepository,
+		codeFactory,
 		githubIntegration,
 		notificationService,
 	)
 
 	repositoryService := repositorySvc.New(
-		cfg,
+		cfg.FrontendURL,
 		repositoryRepository,
 		subscriptionRepository,
 		notificationService,

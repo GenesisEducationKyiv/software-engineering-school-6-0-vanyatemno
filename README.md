@@ -23,7 +23,8 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 |---|---|
 | Language | Go 1.26 |
 | HTTP framework | [Gin](https://github.com/gin-gonic/gin) |
-| ORM / Database | [GORM](https://gorm.io) + PostgreSQL 16 |
+| Database driver | [pgx v5](https://github.com/jackc/pgx) + [pgxpool](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool) on PostgreSQL 16 |
+| Schema migrations | [golang-migrate](https://github.com/golang-migrate/migrate) (embedded SQL, run on startup) |
 | GitHub client | [go-github v84](https://github.com/google/go-github) |
 | Email delivery | SMTP via [gomail](https://github.com/go-gomail/gomail) |
 | Cron scheduler | [robfig/cron](https://github.com/robfig/cron) |
@@ -242,18 +243,17 @@ docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
 ├── internal/
 │   ├── config/                          # Configuration structs & .env loader (Viper)
 │   ├── controllers/                     # HTTP handlers (Gin) & route registration
-│   │   ├── middlewares/                 # CORS, API-key, metrics & structured-logging middlewares
+│   │   ├── middlewares/                 # CORS, API-key, error-handling & structured-logging middlewares
 │   │   ├── router.go                   # Route definitions
-│   │   ├── subscription.go             # Subscription endpoint handlers
-│   │   └── errors.go                   # Centralised HTTP error mapping
+│   │   └── subscription.go             # Subscription endpoint handlers
 │   ├── cron/                            # Cron scheduler (robfig/cron)
 │   ├── infrastructure/
-│   │   ├── db/                          # GORM database connection & auto-migration
+│   │   ├── db/                          # pgxpool connection + embedded golang-migrate migrations
 │   │   ├── logging/                     # Structured zap logger + request-scoped context helpers
 │   │   └── redis/                       # Redis client connection
 │   ├── integrations/
 │   │   └── github/                      # GitHub API client (go-github)
-│   ├── models/                          # GORM domain models & DTOs
+│   ├── models/                          # Domain models & DTOs
 │   │   ├── subscription.go             # Subscription model
 │   │   ├── repository.go               # Repository model
 │   │   ├── code.go                     # Confirmation / unsubscribe code model
@@ -262,7 +262,7 @@ docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
 │   │   ├── mailer/                     # Low-level SMTP sending (gomail)
 │   │   └── templates/                  # HTML email templates & rendering
 │   │       └── htmls/                  # Raw HTML template files
-│   ├── repositories/                    # Data-access layer (GORM queries)
+│   ├── repositories/                    # Data-access layer (pgx queries)
 │   │   ├── code/                       # Code repository
 │   │   ├── repository/                 # Repository repository
 │   │   └── subscription/               # Subscription repository
@@ -289,7 +289,7 @@ The codebase follows a **layered architecture**:
 ```mermaid
 graph LR
     A[Controllers<br/>Gin HTTP handlers] --> B[Services<br/>Business logic]
-    B --> C[Repositories<br/>Data access / GORM]
+    B --> C[Repositories<br/>Data access / pgx]
     C --> D[(PostgreSQL)]
     B --> E[Integrations<br/>GitHub API]
     B --> F[Notifications<br/>SMTP / gomail]

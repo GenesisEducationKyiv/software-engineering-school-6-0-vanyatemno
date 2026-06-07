@@ -3,7 +3,7 @@ package subscription
 import (
 	"context"
 	"errors"
-	"se-school/internal/config"
+	"se-school/internal/models/factories/codes"
 	"testing"
 
 	"se-school/internal/integrations/github"
@@ -14,8 +14,6 @@ import (
 	codeRepo "se-school/internal/repositories/code"
 	repoRepo "se-school/internal/repositories/repository"
 	subRepo "se-school/internal/repositories/subscription"
-
-	"gorm.io/gorm"
 )
 
 type testDeps struct {
@@ -23,6 +21,7 @@ type testDeps struct {
 	repos    *repoRepo.RepositoriesRepositoryMock
 	subs     *subRepo.SubscriptionsRepositoryMock
 	codes    *codeRepo.CodesRepositoryMock
+	factory  *codes.FactoryMock
 	github   *github.GithubIntegrationMock
 	notifier *notifications.NotificationsServiceMock
 }
@@ -30,17 +29,19 @@ type testDeps struct {
 func setupTest() *testDeps {
 	repos := repoRepo.NewRepositoriesRepositoryMock()
 	subs := subRepo.NewSubscriptionsRepositoryMock()
-	codes := codeRepo.NewCodesRepositoryMock()
+	codesRepo := codeRepo.NewCodesRepositoryMock()
+	factory := codes.NewFactoryMock()
 	gh := github.NewGithubIntegrationMock("v1.0.0")
 	notif := notifications.NewNotificationsServiceMock()
 
-	svc := New(&config.Config{}, subs, repos, codes, gh, notif)
+	svc := New("", subs, repos, codesRepo, factory, gh, notif)
 
 	return &testDeps{
 		svc:      svc,
 		repos:    repos,
 		subs:     subs,
-		codes:    codes,
+		codes:    codesRepo,
+		factory:  factory,
 		github:   gh,
 		notifier: notif,
 	}
@@ -48,12 +49,6 @@ func setupTest() *testDeps {
 
 func TestCreate_NewRepo_CreatesRepoAndSubscriptionAndSendsConfirmation(t *testing.T) {
 	td := setupTest()
-
-	td.codes.CreateResult = &models.Code{
-		Model: gorm.Model{ID: 10},
-		Code:  "ABC123",
-		Type:  models.CodeTypeConfirm,
-	}
 
 	req := &dto.CreateSubscriptionRequest{
 		Email: "user@example.com",
@@ -65,14 +60,17 @@ func TestCreate_NewRepo_CreatesRepoAndSubscriptionAndSendsConfirmation(t *testin
 		t.Fatalf("expected no error, got %v", err)
 	}
 
+	if len(td.factory.NewCalls) != 2 {
+		t.Fatalf("expected 2 factory New calls (unsubscribe + confirm), got %d", len(td.factory.NewCalls))
+	}
+	if td.factory.NewCalls[0] != models.CodeTypeUnsubscribe {
+		t.Fatalf("expected first code type %q, got %q", models.CodeTypeUnsubscribe, td.factory.NewCalls[0])
+	}
+	if td.factory.NewCalls[1] != models.CodeTypeConfirm {
+		t.Fatalf("expected second code type %q, got %q", models.CodeTypeConfirm, td.factory.NewCalls[1])
+	}
 	if len(td.codes.CreateCalls) != 2 {
-		t.Fatalf("expected 2 code Create calls (unsubscribe + confirm), got %d", len(td.codes.CreateCalls))
-	}
-	if td.codes.CreateCalls[0] != models.CodeTypeUnsubscribe {
-		t.Fatalf("expected first code type %q, got %q", models.CodeTypeUnsubscribe, td.codes.CreateCalls[0])
-	}
-	if td.codes.CreateCalls[1] != models.CodeTypeConfirm {
-		t.Fatalf("expected second code type %q, got %q", models.CodeTypeConfirm, td.codes.CreateCalls[1])
+		t.Fatalf("expected 2 codesRepository Create calls, got %d", len(td.codes.CreateCalls))
 	}
 
 	if len(td.notifier.SendEmailCalls) != 1 {
@@ -92,7 +90,7 @@ func TestCreate_ExistingRepo_UsesExistingRepoWithoutGithubCall(t *testing.T) {
 	td := setupTest()
 
 	td.repos.Repositories[1] = &models.Repository{
-		Model:   gorm.Model{ID: 1},
+		ID:      1,
 		Owner:   "owner",
 		Name:    "repo",
 		Version: "v1.0.0",
@@ -149,7 +147,7 @@ func TestCreate_GithubError_ReturnsError(t *testing.T) {
 
 func TestCreate_CodeCreationError_ReturnsError(t *testing.T) {
 	td := setupTest()
-	td.codes.CreateErr = errors.New("code generation failed")
+	td.factory.NewErr = errors.New("code generation failed")
 
 	req := &dto.CreateSubscriptionRequest{
 		Email: "user@example.com",
@@ -209,19 +207,19 @@ func TestConfirm_ValidToken_SetsIsConfirmedAndDeletesCode(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 5},
-		Code:  "ABC123",
-		Type:  models.CodeTypeConfirm,
+		ID:   5,
+		Code: "ABC123",
+		Type: models.CodeTypeConfirm,
 	}
 	td.subs.GetByCodeResult = &models.Subscription{
-		Model:       gorm.Model{ID: 1},
+		ID:          1,
 		Email:       "user@example.com",
 		IsConfirmed: false,
 	}
 
 	req := &dto.ConfirmSubscriptionRequest{Token: "ABC123"}
 
-	err := td.svc.Confirm(req)
+	err := td.svc.Confirm(context.Background(), req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -240,7 +238,7 @@ func TestConfirm_InvalidToken_ReturnsError(t *testing.T) {
 
 	req := &dto.ConfirmSubscriptionRequest{Token: "INVALID"}
 
-	err := td.svc.Confirm(req)
+	err := td.svc.Confirm(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -253,15 +251,15 @@ func TestConfirm_SubscriptionNotFound_ReturnsError(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 5},
-		Code:  "ABC123",
-		Type:  models.CodeTypeConfirm,
+		ID:   5,
+		Code: "ABC123",
+		Type: models.CodeTypeConfirm,
 	}
 	td.subs.GetByCodeErr = errors.New("subscription not found")
 
 	req := &dto.ConfirmSubscriptionRequest{Token: "ABC123"}
 
-	err := td.svc.Confirm(req)
+	err := td.svc.Confirm(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -274,19 +272,19 @@ func TestConfirm_SaveError_ReturnsError(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 5},
-		Code:  "ABC123",
-		Type:  models.CodeTypeConfirm,
+		ID:   5,
+		Code: "ABC123",
+		Type: models.CodeTypeConfirm,
 	}
 	td.subs.GetByCodeResult = &models.Subscription{
-		Model: gorm.Model{ID: 1},
+		ID:    1,
 		Email: "user@example.com",
 	}
 	td.subs.SaveErr = errors.New("db save failed")
 
 	req := &dto.ConfirmSubscriptionRequest{Token: "ABC123"}
 
-	err := td.svc.Confirm(req)
+	err := td.svc.Confirm(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -303,18 +301,18 @@ func TestUnsubscribe_ValidToken_DeletesSubscription(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 7},
-		Code:  "unsub-uuid",
-		Type:  models.CodeTypeUnsubscribe,
+		ID:   7,
+		Code: "unsub-uuid",
+		Type: models.CodeTypeUnsubscribe,
 	}
 	td.subs.GetByCodeResult = &models.Subscription{
-		Model: gorm.Model{ID: 2},
+		ID:    2,
 		Email: "user@example.com",
 	}
 
 	req := &dto.UnsubscribeRequest{Token: "unsub-uuid"}
 
-	err := td.svc.Unsubscribe(req)
+	err := td.svc.Unsubscribe(context.Background(), req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -326,7 +324,7 @@ func TestUnsubscribe_InvalidToken_ReturnsError(t *testing.T) {
 
 	req := &dto.UnsubscribeRequest{Token: "INVALID"}
 
-	err := td.svc.Unsubscribe(req)
+	err := td.svc.Unsubscribe(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -339,15 +337,15 @@ func TestUnsubscribe_SubscriptionNotFound_ReturnsError(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 7},
-		Code:  "unsub-uuid",
-		Type:  models.CodeTypeUnsubscribe,
+		ID:   7,
+		Code: "unsub-uuid",
+		Type: models.CodeTypeUnsubscribe,
 	}
 	td.subs.GetByCodeErr = errors.New("subscription not found")
 
 	req := &dto.UnsubscribeRequest{Token: "unsub-uuid"}
 
-	err := td.svc.Unsubscribe(req)
+	err := td.svc.Unsubscribe(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -357,19 +355,19 @@ func TestUnsubscribe_DeleteError_ReturnsError(t *testing.T) {
 	td := setupTest()
 
 	td.codes.GetResult = &models.Code{
-		Model: gorm.Model{ID: 7},
-		Code:  "unsub-uuid",
-		Type:  models.CodeTypeUnsubscribe,
+		ID:   7,
+		Code: "unsub-uuid",
+		Type: models.CodeTypeUnsubscribe,
 	}
 	td.subs.GetByCodeResult = &models.Subscription{
-		Model: gorm.Model{ID: 2},
+		ID:    2,
 		Email: "user@example.com",
 	}
 	td.subs.DeleteErr = errors.New("delete failed")
 
 	req := &dto.UnsubscribeRequest{Token: "unsub-uuid"}
 
-	err := td.svc.Unsubscribe(req)
+	err := td.svc.Unsubscribe(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -381,20 +379,59 @@ func TestUnsubscribe_DeleteError_ReturnsError(t *testing.T) {
 func TestListByEmail_ReturnsSubscriptions(t *testing.T) {
 	td := setupTest()
 
-	expected := []*models.Subscription{
-		{Model: gorm.Model{ID: 1}, Email: "user@example.com"},
-		{Model: gorm.Model{ID: 2}, Email: "user@example.com"},
+	td.subs.GetByEmailResult = []*models.Subscription{
+		{ID: 1, Email: "user@example.com"},
+		{ID: 2, Email: "user@example.com"},
 	}
-	td.subs.GetByEmailResult = expected
 
 	req := &dto.GetSubscriptionsRequest{Email: "user@example.com"}
 
-	result, err := td.svc.ListByEmail(req)
+	result, err := td.svc.ListByEmail(context.Background(), req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(result) != 2 {
 		t.Fatalf("expected 2 subscriptions, got %d", len(result))
+	}
+}
+
+func TestListByEmail_MapsRepositoryField(t *testing.T) {
+	td := setupTest()
+
+	td.subs.GetByEmailResult = []*models.Subscription{
+		{
+			ID:    1,
+			Email: "user@example.com",
+			Repository: &models.Repository{
+				Owner: "golang",
+				Name:  "go",
+			},
+			IsConfirmed: true,
+			LastSeenTag: "v1.22.0",
+		},
+		{
+			ID:    2,
+			Email: "user@example.com",
+		},
+	}
+
+	req := &dto.GetSubscriptionsRequest{Email: "user@example.com"}
+
+	result, err := td.svc.ListByEmail(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result[0].Repo != "golang/go" {
+		t.Fatalf("expected repo %q, got %q", "golang/go", result[0].Repo)
+	}
+	if !result[0].Confirmed {
+		t.Fatal("expected first subscription to be confirmed")
+	}
+	if result[0].LastSeenTag != "v1.22.0" {
+		t.Fatalf("expected last_seen_tag %q, got %q", "v1.22.0", result[0].LastSeenTag)
+	}
+	if result[1].Repo != "" {
+		t.Fatalf("expected empty repo for nil Repository, got %q", result[1].Repo)
 	}
 }
 
@@ -404,7 +441,7 @@ func TestListByEmail_Error_ReturnsError(t *testing.T) {
 
 	req := &dto.GetSubscriptionsRequest{Email: "user@example.com"}
 
-	result, err := td.svc.ListByEmail(req)
+	result, err := td.svc.ListByEmail(context.Background(), req)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -419,7 +456,7 @@ func TestListByEmail_NoSubscriptions_ReturnsEmptySlice(t *testing.T) {
 
 	req := &dto.GetSubscriptionsRequest{Email: "nobody@example.com"}
 
-	result, err := td.svc.ListByEmail(req)
+	result, err := td.svc.ListByEmail(context.Background(), req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -4,19 +4,18 @@ import (
 	"net/http"
 	"se-school/internal/infrastructure/logging"
 	"se-school/internal/models/dto"
-	"se-school/internal/services/subscription"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type SubscriptionController struct {
-	subscriptionService subscription.SubscriptionsService
+	subscriptionService SubscriptionsService
 }
 
 // NewSubscriptionController creates a new SubscriptionController backed by the given service.
 func NewSubscriptionController(
-	subscriptionService subscription.SubscriptionsService,
+	subscriptionService SubscriptionsService,
 ) *SubscriptionController {
 	return &SubscriptionController{
 		subscriptionService: subscriptionService,
@@ -51,7 +50,7 @@ func (sc *SubscriptionController) Subscribe(c *gin.Context) {
 
 	err = sc.subscriptionService.Create(c.Request.Context(), &req)
 	if err != nil {
-		handleServiceError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -78,9 +77,9 @@ func (sc *SubscriptionController) Confirm(c *gin.Context) {
 		return
 	}
 
-	err := sc.subscriptionService.Confirm(&req)
+	err := sc.subscriptionService.Confirm(c.Request.Context(), &req)
 	if err != nil {
-		handleServiceError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -107,9 +106,9 @@ func (sc *SubscriptionController) Unsubscribe(c *gin.Context) {
 		return
 	}
 
-	err := sc.subscriptionService.Unsubscribe(&req)
+	err := sc.subscriptionService.Unsubscribe(c.Request.Context(), &req)
 	if err != nil {
-		handleServiceError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
@@ -135,25 +134,11 @@ func (sc *SubscriptionController) GetSubscriptions(c *gin.Context) {
 		return
 	}
 
-	subscriptions, err := sc.subscriptionService.ListByEmail(&req)
+	subscriptions, err := sc.subscriptionService.ListByEmail(c.Request.Context(), &req)
 	if err != nil {
-		handleServiceError(c, err)
+		_ = c.Error(err)
 		return
 	}
 
-	response := make([]dto.SubscriptionResponse, 0, len(subscriptions))
-	for _, sub := range subscriptions {
-		repo := ""
-		if sub.Repository != nil {
-			repo = sub.Repository.Owner + "/" + sub.Repository.Name
-		}
-		response = append(response, dto.SubscriptionResponse{
-			Email:       sub.Email,
-			Repo:        repo,
-			Confirmed:   sub.IsConfirmed,
-			LastSeenTag: sub.LastSeenTag,
-		})
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, subscriptions)
 }

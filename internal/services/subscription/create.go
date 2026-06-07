@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 func (s *Service) Create(
@@ -25,7 +24,7 @@ func (s *Service) Create(
 	err = s.sendConfirmationCode(sub)
 	if err != nil {
 		zap.L().Error("failed to send confirmation code", zap.Error(err))
-		deleteError := s.subscriptionsRepository.Delete(sub)
+		deleteError := s.subscriptionsRepository.Delete(ctx, sub)
 		if deleteError != nil {
 			zap.L().Error("failed to rollback subscription create", zap.Error(deleteError))
 			return deleteError
@@ -51,13 +50,23 @@ func (s *Service) createNewSubscription(
 		return nil, err
 	}
 
-	unsubCode, err := s.codesRepository.Create(models.CodeTypeUnsubscribe)
+	unsubCode, err := s.codeFactory.New(models.CodeTypeUnsubscribe)
 	if err != nil {
 		return nil, err
 	}
-	subCode, err := s.codesRepository.Create(models.CodeTypeConfirm)
+	if err := s.codesRepository.Create(ctx, unsubCode); err != nil {
+		return nil, err
+	}
+
+	subCode, err := s.codeFactory.New(models.CodeTypeConfirm)
 	if err != nil {
-		if delErr := s.codesRepository.Delete(unsubCode.ID); delErr != nil {
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
+			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
+		}
+		return nil, err
+	}
+	if err := s.codesRepository.Create(ctx, subCode); err != nil {
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
 			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
 		}
 		return nil, err
@@ -67,22 +76,21 @@ func (s *Service) createNewSubscription(
 		RepositoryID:      repo.ID,
 		SubscribeCodeID:   subCode.ID,
 		UnsubscribeCodeID: unsubCode.ID,
+		SubscribeCode:     subCode,
+		UnsubscribeCode:   unsubCode,
 		Email:             req.Email,
 		LastSeenTag:       repo.Version,
 	}
-	err = s.subscriptionsRepository.Create(sub)
-	if err != nil {
+	if err := s.subscriptionsRepository.Create(ctx, sub); err != nil {
 		zap.L().Error("failed to create subscription", zap.Error(err))
-		if delErr := s.codesRepository.Delete(unsubCode.ID); delErr != nil {
+		if delErr := s.codesRepository.Delete(ctx, unsubCode.ID); delErr != nil {
 			zap.L().Error("failed to rollback unsubscribe code", zap.Error(delErr))
 		}
-		if delErr := s.codesRepository.Delete(subCode.ID); delErr != nil {
+		if delErr := s.codesRepository.Delete(ctx, subCode.ID); delErr != nil {
 			zap.L().Error("failed to rollback subscribe code", zap.Error(delErr))
 		}
 		return nil, err
 	}
-	sub.SubscribeCode = subCode
-	sub.UnsubscribeCode = unsubCode
 
 	return sub, nil
 }
@@ -100,12 +108,12 @@ func parseRepoFields(repo string) (*parsedRepoValue, error) {
 }
 
 func (s *Service) getOrCreateRepository(ctx context.Context, values *parsedRepoValue) (*models.Repository, error) {
-	repository, err := s.repositoriesRepository.Find(&models.Repository{
+	repository, err := s.repositoriesRepository.Find(ctx, &models.Repository{
 		Owner: values.Owner,
 		Name:  values.RepositoryName,
 	})
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if !errors.Is(err, models.ErrNotFound) {
 			return nil, err
 		}
 		repository, err = s.createRepository(ctx, values)
@@ -127,7 +135,7 @@ func (s *Service) createRepository(ctx context.Context, values *parsedRepoValue)
 		Name:    values.RepositoryName,
 		Version: currentVersion,
 	}
-	err = s.repositoriesRepository.Create(repo)
+	err = s.repositoriesRepository.Create(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +147,7 @@ func (s *Service) sendConfirmationCode(sub *models.Subscription) error {
 	err := s.notificationService.SendEmail(
 		[]string{sub.Email},
 		templates.Confirmation,
-		templates.BuildConfirmEmailPayload(s.cfg, sub.SubscribeCode.Code),
+		templates.BuildConfirmEmailPayload(s.frontendURL, sub.SubscribeCode.Code),
 	)
 	if err != nil {
 		return err

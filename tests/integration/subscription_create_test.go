@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"se-school/internal/integrations/github"
-	"se-school/internal/models"
 	"se-school/internal/models/dto"
 	"se-school/internal/notifications/templates"
 	"se-school/tests/integration/helpers"
@@ -73,13 +72,7 @@ func TestCreate_NewRepo_PersistsAndSendsConfirmation(t *testing.T) {
 func TestCreate_ExistingRepository_NoGithubCall(t *testing.T) {
 	s := helpers.NewSuite(t)
 
-	if err := s.DB.Create(&models.Repository{
-		Owner:   "octocat",
-		Name:    "hello-world",
-		Version: "v2.3.4",
-	}).Error; err != nil {
-		t.Fatalf("seed repository: %v", err)
-	}
+	s.SeedRepository(t, "octocat", "hello-world", "v2.3.4")
 
 	s.GH.FailOnAnyRequest("repository already exists, no github traffic expected")
 
