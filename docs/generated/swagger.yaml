@@ -1,0 +1,189 @@
+basePath: /api
+definitions:
+  dto.SubscriptionResponse:
+    properties:
+      confirmed:
+        type: boolean
+      email:
+        type: string
+      last_seen_tag:
+        type: string
+      repo:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: GitHub Release Notification API that allows users to subscribe to email
+    notifications about new releases of a chosen GitHub repository.
+  title: GitHub Release Notification API
+  version: 1.0.0
+paths:
+  /confirm/{token}:
+    get:
+      description: Confirms a subscription using the token sent in the confirmation
+        email.
+      parameters:
+      - description: Confirmation token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Subscription confirmed successfully
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "400":
+          description: Invalid token
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Token not found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Confirm email subscription
+      tags:
+      - subscription
+  /subscribe:
+    post:
+      consumes:
+      - application/json
+      - application/x-www-form-urlencoded
+      description: Subscribe an email to receive notifications about new releases
+        of a GitHub repository. The repository is validated via GitHub API.
+      parameters:
+      - description: Email address to subscribe
+        in: formData
+        name: email
+        required: true
+        type: string
+      - description: GitHub repository in owner/repo format (e.g., golang/go)
+        in: formData
+        name: repo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Subscription successful. Confirmation email sent.
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "400":
+          description: Invalid input (e.g., invalid repo format)
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Repository not found on GitHub
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "409":
+          description: Email already subscribed to this repository
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Subscribe to release notifications
+      tags:
+      - subscription
+  /subscriptions:
+    get:
+      description: Returns all active subscriptions for the given email address.
+      parameters:
+      - description: Email address to look up subscriptions for
+        in: query
+        name: email
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful operation - list of subscriptions returned
+          schema:
+            items:
+              $ref: '#/definitions/dto.SubscriptionResponse'
+            type: array
+        "400":
+          description: Invalid email
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get subscriptions for an email
+      tags:
+      - subscription
+  /unsubscribe/{token}:
+    get:
+      description: Unsubscribes an email from release notifications using the token
+        sent in emails.
+      parameters:
+      - description: Unsubscribe token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Unsubscribed successfully
+          schema:
+            properties:
+              message:
+                type: string
+            type: object
+        "400":
+          description: Invalid token
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Token not found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Unsubscribe from release notifications
+      tags:
+      - subscription
+securityDefinitions:
+  ApiKeyAuth:
+    description: API key passed in the X-API-Key header
+    in: header
+    name: X-API-Key
+    type: apiKey
+swagger: "2.0"

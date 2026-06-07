@@ -1,0 +1,64 @@
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  github-subscriptions:
+    name: subscriptions
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    expose:
+      - '6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      github-subscriptions:
+        aliases:
+          - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
+  postgres:
+    image: postgres:16.3-alpine
+    ports:
+      - '5432:5432'
+    expose:
+      - '5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      github-subscriptions:
+        aliases:
+          - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
+  backend:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    ports:
+      - '${SERVER_PORT}:${SERVER_PORT}'
+    expose:
+      - '${SERVER_PORT}'
+    env_file:
+      - ./.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      github-subscriptions:
+        aliases:
+          - backend
