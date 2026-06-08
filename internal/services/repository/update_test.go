@@ -6,11 +6,14 @@ import (
 	"testing"
 
 	"se-school/internal/integrations/github"
+	"se-school/internal/metrics"
 	"se-school/internal/models"
 	"se-school/internal/notifications"
 	"se-school/internal/notifications/templates"
 	repoRepo "se-school/internal/repositories/repository"
 	subRepo "se-school/internal/repositories/subscription"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func newTestService(
@@ -259,6 +262,45 @@ func TestCheckAllReposTagAndAlert_PartialFailure_ContinuesProcessing(t *testing.
 	err := svc.CheckAllReposTagAndAlert(context.Background())
 	if err != nil {
 		t.Fatalf("expected nil (errors are collected but not returned), got %v", err)
+	}
+}
+
+func TestCheckAllReposTagAndAlert_RecordsRepoCheckSuccessMetric(t *testing.T) {
+	repos := map[uint]*models.Repository{
+		1: {ID: 1, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
+		2: {ID: 2, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
+	}
+
+	svc, _, _, _, _ := newTestService("v2.0.0", repos, []*models.Subscription{})
+
+	before := testutil.ToFloat64(metrics.RepoCheckTotal.WithLabelValues("success"))
+	if err := svc.CheckAllReposTagAndAlert(context.Background()); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	after := testutil.ToFloat64(metrics.RepoCheckTotal.WithLabelValues("success"))
+
+	if got := after - before; got != 2 {
+		t.Fatalf("expected 2 success repo-check increments, got %v", got)
+	}
+}
+
+func TestCheckAllReposTagAndAlert_RecordsRepoCheckErrorMetric(t *testing.T) {
+	repos := map[uint]*models.Repository{
+		1: {ID: 1, Owner: "owner1", Name: "repo1", Version: "v1.0.0"},
+		2: {ID: 2, Owner: "owner2", Name: "repo2", Version: "v1.0.0"},
+	}
+
+	svc, _, _, _, githubMock := newTestService("", repos, []*models.Subscription{})
+	githubMock.SetErrToReturn(errors.New("github rate limited"))
+
+	before := testutil.ToFloat64(metrics.RepoCheckTotal.WithLabelValues("error"))
+	if err := svc.CheckAllReposTagAndAlert(context.Background()); err != nil {
+		t.Fatalf("expected nil (errors are collected but not returned), got %v", err)
+	}
+	after := testutil.ToFloat64(metrics.RepoCheckTotal.WithLabelValues("error"))
+
+	if got := after - before; got != 2 {
+		t.Fatalf("expected 2 error repo-check increments, got %v", got)
 	}
 }
 
