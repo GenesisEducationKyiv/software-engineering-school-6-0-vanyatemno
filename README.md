@@ -17,6 +17,46 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 4. A cron job periodically polls the GitHub API for new releases; when a new tag is detected, all confirmed subscribers are notified via email.
 5. Users can unsubscribe at any time using a token included in every notification email.
 
+---
+
+## Architecture
+
+The system is split into **two independently deployable microservices** plus a shared
+contract module. Email delivery — the notifications domain — has been extracted out of the
+API into its own service. The two communicate asynchronously over a **Redis Pub/Sub** channel;
+they share no database and make no in-process calls, only the wire types in `pkg/contract`.
+
+```mermaid
+graph LR
+    subgraph api[API service · module se-school]
+      H[Gin HTTP handlers] --> S[Subscription / Repository services]
+      CR[Cron scheduler] --> S
+      S --> P[Notifications publisher]
+    end
+    P -->|PUBLISH contract.Message<br/>channel notifications:events| R[(Redis)]
+    R -->|SUBSCRIBE| W[Worker]
+    subgraph notif[Notifications service · module ghnotify/notifier]
+      W --> T[Template rendering]
+      W --> M[SMTP mailer]
+    end
+    S --> DB[(PostgreSQL)]
+    S --> GH[GitHub API]
+    M --> MX[SMTP server]
+```
+
+- **API service** (`services/api`, Go module `se-school`): the HTTP API, the release-check
+  cron, the database and the GitHub integration. When it needs to send an email it **publishes**
+  a `contract.Message` (template name + receivers + payload) to Redis instead of sending it.
+- **Notifications service** (`services/notifications`, Go module `ghnotify/notifier`):
+  subscribes to the channel, renders the HTML template (embedded in the binary) and delivers the
+  email over SMTP. It owns no database and no domain logic.
+- **Contract** (`pkg/contract`, Go module `ghnotify/contract`): the pure, JSON-serializable
+  types both sides agree on (the channel name, template names and payloads).
+
+> **Delivery semantics:** Pub/Sub is fire-and-forget (at-most-once) — if the notifier is down
+> when a message is published, that message is lost. The wire contract is identical to a Redis
+> Streams setup, so upgrading to durable, acknowledged delivery later is a localized change.
+
 **Key technologies:**
 
 | Concern | Technology |
@@ -26,7 +66,8 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 | Database driver | [pgx v5](https://github.com/jackc/pgx) + [pgxpool](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool) on PostgreSQL 16 |
 | Schema migrations | [golang-migrate](https://github.com/golang-migrate/migrate) (embedded SQL, run on startup) |
 | GitHub client | [go-github v84](https://github.com/google/go-github) |
-| Email delivery | SMTP via [gomail](https://github.com/go-gomail/gomail) |
+| Email delivery | SMTP via [gomail](https://github.com/go-gomail/gomail) (in the notifications service) |
+| Inter-service messaging | Redis Pub/Sub via [go-redis v9](https://github.com/redis/go-redis) |
 | Cron scheduler | [robfig/cron](https://github.com/robfig/cron) |
 | Configuration | [Viper](https://github.com/spf13/viper) + [godotenv](https://github.com/joho/godotenv) |
 | Logging | [zap](https://go.uber.org/zap) |
@@ -74,30 +115,38 @@ cp .env.example .env
 
 ### Run locally
 
+The two services are separate Go modules. Each runs from its own module directory; both need a
+running Redis (the API publishes to it, the notifier subscribes).
+
 ```bash
-# 1. Install dependencies
-make dependencies        # runs go mod tidy && go mod download
+# 1. Install dependencies for every module
+make dependencies        # go mod tidy && go mod download per module
 
-# 2. Make sure PostgreSQL is running and DB_DSN in .env points to it
+# 2. Make sure PostgreSQL and Redis are running and .env points to them
 
-# 3. Start the server
-go run cmd/main.go
+# 3. Start the API (HTTP + cron + publisher)
+cd services/api && go run ./cmd
+
+# 4. In another terminal, start the notifications service (consumer + SMTP)
+cd services/notifications && go run ./cmd
 ```
 
-The server starts on the port defined by `SERVER_PORT` (default `8080`).
+The API starts on the port defined by `SERVER_PORT` (default `8080`).
 Swagger UI is available at `http://localhost:8080/swagger/index.html`.
 
 ### Run with Docker Compose
 
+A single compose file brings up the whole cluster:
+
 ```bash
-# Build and start both the backend and PostgreSQL containers
+# Build and start redis + postgres + api + notifier
 docker compose up --build
 ```
 
 This will:
-- Start a **PostgreSQL 16** container with a health-check.
-- Build the Go binary inside a multi-stage Docker image and start the **backend** container.
-- Expose the API on the port specified by `SERVER_PORT` in your `.env`.
+- Start **Redis 7** and **PostgreSQL 16** containers with health-checks.
+- Build and start the **api** service (HTTP API + cron), exposed on `SERVER_PORT`.
+- Build and start the **notifier** service (Redis consumer + SMTP sender).
 
 To stop:
 
@@ -109,9 +158,10 @@ docker compose down
 
 | Target | Description |
 |---|---|
-| `make dependencies` | `go mod tidy` + `go mod download` |
-| `make lint` | Run `golangci-lint` (auto-installs if missing) |
-| `make swagger` | Regenerate Swagger docs from annotations into `docs/generated/` |
+| `make dependencies` | `go mod tidy` + `go mod download` for every module |
+| `make lint` | Run `golangci-lint` per module (auto-installs if missing) |
+| `make swagger` | Regenerate Swagger docs into `services/api/docs/generated/` |
+| `make test-unit` | Run unit tests across all modules |
 | `make logging-up` | Start the app together with the Elasticsearch + Kibana + Filebeat stack |
 | `make logging-down` | Stop the logging stack (append `-v` manually to also drop the ES volume) |
 | `make logging-logs` | Follow the logs of Filebeat / Elasticsearch / Kibana |
@@ -139,7 +189,7 @@ aggregation.
 
 ```mermaid
 graph LR
-    A[Backend<br/>zap JSON to stdout] --> B[Docker json-file logs]
+    A[Services api + notifier<br/>zap JSON to stdout] --> B[Docker json-file logs]
     B -->|autodiscover label logging=app| C[Filebeat]
     C --> D[(Elasticsearch<br/>app-logs-*)]
     D --> E[Kibana<br/>search / dashboards]
@@ -169,7 +219,7 @@ graph LR
 ### Run the pipeline
 
 ```bash
-# Brings up postgres + redis + backend + elasticsearch + kibana + filebeat
+# Brings up postgres + redis + api + notifier + elasticsearch + kibana + filebeat
 make logging-up
 
 # Follow the pipeline components (optional)
@@ -235,56 +285,53 @@ docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
 
 ```
 .
-├── cmd/
-│   └── main.go                          # Application entry-point
-├── docs/
-│   ├── source-swagger.yaml              # Hand-written OpenAPI 2.0 spec
-│   └── generated/                       # Auto-generated Swagger files (swag init)
-├── internal/
-│   ├── config/                          # Configuration structs & .env loader (Viper)
-│   ├── controllers/                     # HTTP handlers (Gin) & route registration
-│   │   ├── middlewares/                 # CORS, API-key, error-handling & structured-logging middlewares
-│   │   ├── router.go                   # Route definitions
-│   │   └── subscription.go             # Subscription endpoint handlers
-│   ├── cron/                            # Cron scheduler (robfig/cron)
-│   ├── infrastructure/
-│   │   ├── db/                          # pgxpool connection + embedded golang-migrate migrations
-│   │   ├── logging/                     # Structured zap logger + request-scoped context helpers
-│   │   └── redis/                       # Redis client connection
-│   ├── integrations/
-│   │   └── github/                      # GitHub API client (go-github)
-│   ├── models/                          # Domain models & DTOs
-│   │   ├── subscription.go             # Subscription model
-│   │   ├── repository.go               # Repository model
-│   │   ├── code.go                     # Confirmation / unsubscribe code model
-│   │   └── dto/                        # Request / response DTOs
-│   ├── notifications/                   # Email notification orchestration
-│   │   ├── mailer/                     # Low-level SMTP sending (gomail)
-│   │   └── templates/                  # HTML email templates & rendering
-│   │       └── htmls/                  # Raw HTML template files
-│   ├── repositories/                    # Data-access layer (pgx queries)
-│   │   ├── code/                       # Code repository
-│   │   ├── repository/                 # Repository repository
-│   │   └── subscription/               # Subscription repository
-│   ├── services/                        # Business logic layer
-│   │   ├── repository/                 # Release-check & notification dispatch
-│   │   └── subscription/               # Subscribe / confirm / unsubscribe / list
-│   └── utils/                           # Shared helpers (e.g. code generation)
-├── deploy/
-│   └── logging/
-│       └── filebeat.yml                 # Filebeat autodiscover + Elasticsearch output config
-├── .env.example                         # Environment variable template
-├── .golangci.yml                        # Linter configuration
-├── docker-compose.yml                   # Docker Compose (backend + postgres)
+├── pkg/
+│   └── contract/                        # Shared module: ghnotify/contract
+│       ├── contract.go                  # Channel, TemplateName, Message envelope, payloads
+│       └── go.mod
+├── services/
+│   ├── api/                             # API service · Go module se-school
+│   │   ├── cmd/main.go                  # Entry-point: HTTP + cron + publisher wiring
+│   │   ├── docs/                        # Swagger (source spec + generated)
+│   │   ├── internal/
+│   │   │   ├── config/                  # Configuration structs & .env loader (Viper)
+│   │   │   ├── controllers/             # HTTP handlers (Gin), middlewares & routing
+│   │   │   ├── cron/                    # Cron scheduler (robfig/cron)
+│   │   │   ├── infrastructure/          # db (pgxpool + migrations), logging, redis
+│   │   │   ├── integrations/github/     # GitHub API client (go-github)
+│   │   │   ├── models/                  # Domain models & DTOs
+│   │   │   ├── notifications/           # Publisher + payload builders + test mock
+│   │   │   │   └── publisher/           # Redis Pub/Sub publisher (implements SendEmail)
+│   │   │   ├── repositories/            # Data-access layer (pgx queries)
+│   │   │   ├── services/                # Business logic (subscription, repository)
+│   │   │   └── utils/                   # Shared helpers (e.g. code generation)
+│   │   ├── tests/integration/           # Integration tests (postgres + redis, mocked notifier)
+│   │   ├── Dockerfile
+│   │   └── go.mod / go.sum
+│   └── notifications/                   # Notifications service · Go module ghnotify/notifier
+│       ├── cmd/main.go                  # Entry-point: subscribe + render + send
+│       ├── internal/
+│       │   ├── config/                  # Slim config (Redis, Mailer, Log)
+│       │   ├── logging/                 # Structured zap logger
+│       │   ├── mailer/                  # Low-level SMTP sending (gomail)
+│       │   ├── templates/               # HTML templates & rendering (htmls/ embedded)
+│       │   └── worker/                  # Pub/Sub consumer loop
+│       ├── Dockerfile
+│       └── go.mod / go.sum
+├── tests/e2e/                           # Black-box e2e tests (own module)
+├── deploy/logging/filebeat.yml          # Filebeat autodiscover + Elasticsearch output
+├── .env.example                         # Environment variable template (shared by both services)
+├── docker-compose.yml                   # Single cluster: redis + postgres + api + notifier
 ├── docker-compose.logging.yml           # Overlay: Elasticsearch + Kibana + Filebeat pipeline
-├── Dockerfile                           # Multi-stage Docker build
-├── lefthook.yml                         # Git hook definitions
-├── Makefile                             # Build / lint / swagger targets
-├── go.mod / go.sum                      # Go module files
+├── docker-compose.e2e.yml               # End-to-end test stack
+├── docker-compose.test.yml              # Integration test stack
+├── Dockerfile.test                      # Integration test runner image
+├── Makefile                             # Build / lint / swagger / test targets
 └── README.md
 ```
 
-The codebase follows a **layered architecture**:
+Each service follows a **layered architecture** internally, communicating through **Go
+interfaces** so dependencies are trivially mockable in tests:
 
 ```mermaid
 graph LR
@@ -292,11 +339,11 @@ graph LR
     B --> C[Repositories<br/>Data access / pgx]
     C --> D[(PostgreSQL)]
     B --> E[Integrations<br/>GitHub API]
-    B --> F[Notifications<br/>SMTP / gomail]
+    B --> F[Publisher<br/>Redis PUBLISH]
     G[Cron Scheduler] --> B
+    F --> R[(Redis)]
+    R --> W[Notifier worker<br/>render + SMTP]
 ```
-
-Every layer communicates through **Go interfaces**, making it straightforward to mock dependencies in tests.
 
 ---
 
@@ -308,5 +355,6 @@ Interactive Swagger UI is available at **`/swagger/index.html`** when the server
 
 ## Future improvements
 
-1. Switch to the external notifications provider.
-2. Add integrations tests.
+1. Upgrade the notifications transport from Redis Pub/Sub (at-most-once) to Redis Streams with
+   consumer groups for durable, acknowledged, retryable delivery.
+2. Add a dead-letter channel for notification jobs that fail to send after retries.

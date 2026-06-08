@@ -1,20 +1,31 @@
 GO_PATH := $(shell go env GOPATH)
 
-dependencies:
-	@go mod tidy
-	@go mod download
+# The repository is a multi-module workspace: the shared contract module plus
+# one module per microservice. Most Go targets iterate over all of them.
+GO_MODULES := pkg/contract services/api services/notifications
 
-lint: check-lint dependencies
-	$(GO_PATH)/bin/golangci-lint run --timeout=1m -c .golangci.yml
+dependencies:
+	@for m in $(GO_MODULES); do \
+		echo "==> $$m"; \
+		(cd $$m && go mod tidy && go mod download) || exit $$?; \
+	done
+
+lint: check-lint
+	@for m in services/api services/notifications; do \
+		echo "==> lint $$m"; \
+		(cd $$m && $(GO_PATH)/bin/golangci-lint run --timeout=1m -c $(CURDIR)/.golangci.yml ./...) || exit $$?; \
+	done
 
 check-lint:
 	@which golangci-lint || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GO_PATH)/bin latest
 
 swagger:
-	@swag init -g cmd/main.go -o docs/generated
+	@cd services/api && swag init -g cmd/main.go -o docs/generated
 
 test-unit:
-	go test -race -count=1 ./internal/...
+	cd services/api && go test -race -count=1 ./internal/...
+	cd services/notifications && go test -race -count=1 ./...
+	cd pkg/contract && go test -race -count=1 ./...
 
 test-integration:
 	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests; \
