@@ -1,0 +1,23 @@
+# Prometheus scrape config for the local metrics pipeline.
+#
+# Mounted into the prometheus container by docker-compose.metrics.yml.
+# The app exposes RED metrics at /metrics (see internal/metrics + the
+# PrometheusMiddleware); this scrapes them off the in-network backend.
+#
+# NOTE: the backend target port is hard-coded to 8080 (the default
+# SERVER_PORT). If you change SERVER_PORT in .env, update it here too —
+# Prometheus does not expand env vars in scrape targets.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: se-school
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
