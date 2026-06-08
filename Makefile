@@ -49,3 +49,20 @@ logging-down:
 # Follow the logs of the pipeline components.
 logging-logs:
 	docker compose $(LOGGING_COMPOSE) logs -f filebeat elasticsearch kibana
+
+# -- Metrics pipeline (Prometheus + Grafana) -----------------------------------
+
+METRICS_COMPOSE := -f docker-compose.yml -f docker-compose.metrics.yml
+
+# Bring up the app together with the Prometheus/Grafana stack.
+# Prometheus UI: http://localhost:9090  Grafana: http://localhost:3000 (admin/admin).
+metrics-up:
+	docker compose $(METRICS_COMPOSE) up --build -d
+
+# Tear the metrics stack down (add `-v` manually to also drop the TSDB volume).
+metrics-down:
+	docker compose $(METRICS_COMPOSE) down
+
+# Follow the logs of the pipeline components.
+metrics-logs:
+	docker compose $(METRICS_COMPOSE) logs -f prometheus grafana
