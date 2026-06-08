@@ -1,5 +1,5 @@
 # Grafana dashboard provider — loads any dashboard JSON found under
-# /var/lib/grafana/dashboards on startup. Mounted by docker-compose.metrics.yml.
+# /var/lib/grafana/dashboards on startup. Mounted by docker-compose.yml.
 apiVersion: 1
 
 providers:

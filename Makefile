@@ -34,35 +34,23 @@ test-e2e:
 test-e2e-down:
 	docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v
 
-# -- Logging pipeline (Elasticsearch + Kibana + Filebeat) ----------------------
+# -- Full observability stack (app + logging + metrics) ------------------------
+#
+# Everything lives in the single docker-compose.yml: backend, Postgres, Redis,
+# Elasticsearch + Kibana + Filebeat, and Prometheus + Grafana.
+#   Swagger:    http://localhost:8080/swagger/index.html
+#   Kibana:     http://localhost:5601
+#   Prometheus: http://localhost:9090
+#   Grafana:    http://localhost:3000 (admin/admin)
 
-LOGGING_COMPOSE := -f docker-compose.yml -f docker-compose.logging.yml
+# Bring up the whole stack.
+up:
+	docker compose up --build -d
 
-# Bring up the app together with the Elasticsearch/Kibana/Filebeat stack.
-logging-up:
-	docker compose $(LOGGING_COMPOSE) up --build -d
+# Tear it down (append `-v` manually to also drop the ES/TSDB/db volumes).
+down:
+	docker compose down
 
-# Tear the logging stack down (add `-v` manually to also drop the ES volume).
-logging-down:
-	docker compose $(LOGGING_COMPOSE) down
-
-# Follow the logs of the pipeline components.
-logging-logs:
-	docker compose $(LOGGING_COMPOSE) logs -f filebeat elasticsearch kibana
-
-# -- Metrics pipeline (Prometheus + Grafana) -----------------------------------
-
-METRICS_COMPOSE := -f docker-compose.yml -f docker-compose.metrics.yml
-
-# Bring up the app together with the Prometheus/Grafana stack.
-# Prometheus UI: http://localhost:9090  Grafana: http://localhost:3000 (admin/admin).
-metrics-up:
-	docker compose $(METRICS_COMPOSE) up --build -d
-
-# Tear the metrics stack down (add `-v` manually to also drop the TSDB volume).
-metrics-down:
-	docker compose $(METRICS_COMPOSE) down
-
-# Follow the logs of the pipeline components.
-metrics-logs:
-	docker compose $(METRICS_COMPOSE) logs -f prometheus grafana
+# Follow logs (pass SVC=... to scope, e.g. `make logs SVC="prometheus grafana"`).
+logs:
+	docker compose logs -f $(SVC)

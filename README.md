@@ -112,12 +112,9 @@ docker compose down
 | `make dependencies` | `go mod tidy` + `go mod download` |
 | `make lint` | Run `golangci-lint` (auto-installs if missing) |
 | `make swagger` | Regenerate Swagger docs from annotations into `docs/generated/` |
-| `make logging-up` | Start the app together with the Elasticsearch + Kibana + Filebeat stack |
-| `make logging-down` | Stop the logging stack (append `-v` manually to also drop the ES volume) |
-| `make logging-logs` | Follow the logs of Filebeat / Elasticsearch / Kibana |
-| `make metrics-up` | Start the app together with the Prometheus + Grafana stack |
-| `make metrics-down` | Stop the metrics stack (append `-v` manually to also drop the TSDB volume) |
-| `make metrics-logs` | Follow the logs of Prometheus / Grafana |
+| `make up` | Start the whole stack: backend + Postgres + Redis + logging (ES/Kibana/Filebeat) + metrics (Prometheus/Grafana) |
+| `make down` | Stop the stack (append `-v` manually to also drop the ES/TSDB/db volumes) |
+| `make logs` | Follow logs (`make logs SVC="prometheus grafana"` to scope) |
 
 ### Git hooks (Lefthook)
 
@@ -172,11 +169,11 @@ graph LR
 ### Run the pipeline
 
 ```bash
-# Brings up postgres + redis + backend + elasticsearch + kibana + filebeat
-make logging-up
+# Brings up the whole stack (backend + postgres + redis + ES/Kibana/Filebeat + Prometheus/Grafana)
+make up
 
-# Follow the pipeline components (optional)
-make logging-logs
+# Follow the logging components (optional)
+make logs SVC="filebeat elasticsearch kibana"
 ```
 
 Endpoints once it's up:
@@ -223,9 +220,9 @@ curl "http://localhost:9200/app-logs-*/_search?size=1&pretty"
 ### Tear down
 
 ```bash
-make logging-down          # keep the Elasticsearch volume
-# or, to also delete indexed logs:
-docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
+make down          # keep volumes
+# or, to also delete indexed logs / metrics / db data:
+docker compose down -v
 ```
 
 > On Linux, Elasticsearch may require a higher `vm.max_map_count`:
@@ -271,11 +268,11 @@ graph LR
 ### Run the pipeline
 
 ```bash
-# Brings up postgres + redis + backend + prometheus + grafana
-make metrics-up
+# Same single stack — metrics come up with everything else
+make up
 
-# Follow the pipeline components (optional)
-make metrics-logs
+# Follow the metrics components (optional)
+make logs SVC="prometheus grafana"
 ```
 
 Endpoints once it's up:
@@ -296,9 +293,9 @@ Open Grafana → the **se-school RED** dashboard for rate / error / latency pane
 ### Tear down
 
 ```bash
-make metrics-down          # keep the Prometheus TSDB volume
-# or, to also delete stored metrics:
-docker compose -f docker-compose.yml -f docker-compose.metrics.yml down -v
+make down          # keep volumes
+# or, to also delete stored metrics / logs / db data:
+docker compose down -v
 ```
 
 ---
@@ -343,12 +340,14 @@ docker compose -f docker-compose.yml -f docker-compose.metrics.yml down -v
 │   │   └── subscription/               # Subscribe / confirm / unsubscribe / list
 │   └── utils/                           # Shared helpers (e.g. code generation)
 ├── deploy/
-│   └── logging/
-│       └── filebeat.yml                 # Filebeat autodiscover + Elasticsearch output config
+│   ├── logging/
+│   │   └── filebeat.yml                 # Filebeat autodiscover + Elasticsearch output config
+│   └── metrics/
+│       ├── prometheus.yml               # Prometheus scrape config (backend /metrics)
+│       └── grafana/                     # Provisioned datasource + RED dashboard
 ├── .env.example                         # Environment variable template
 ├── .golangci.yml                        # Linter configuration
-├── docker-compose.yml                   # Docker Compose (backend + postgres)
-├── docker-compose.logging.yml           # Overlay: Elasticsearch + Kibana + Filebeat pipeline
+├── docker-compose.yml                   # Single full stack: app + logging + metrics
 ├── Dockerfile                           # Multi-stage Docker build
 ├── lefthook.yml                         # Git hook definitions
 ├── Makefile                             # Build / lint / swagger targets

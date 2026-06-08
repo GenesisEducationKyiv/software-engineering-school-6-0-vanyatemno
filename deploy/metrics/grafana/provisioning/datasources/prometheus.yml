@@ -1,5 +1,5 @@
 # Grafana datasource provisioning — auto-wires Prometheus on startup so no
-# manual UI setup is needed. Mounted by docker-compose.metrics.yml.
+# manual UI setup is needed. Mounted by docker-compose.yml.
 apiVersion: 1
 
 datasources:

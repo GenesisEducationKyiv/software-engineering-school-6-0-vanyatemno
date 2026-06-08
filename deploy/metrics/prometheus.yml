@@ -1,6 +1,6 @@
 # Prometheus scrape config for the local metrics pipeline.
 #
-# Mounted into the prometheus container by docker-compose.metrics.yml.
+# Mounted into the prometheus container by docker-compose.yml.
 # The app exposes RED metrics at /metrics (see internal/metrics + the
 # PrometheusMiddleware); this scrapes them off the in-network backend.
 #
