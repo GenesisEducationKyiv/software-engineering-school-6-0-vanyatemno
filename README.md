@@ -115,6 +115,9 @@ docker compose down
 | `make logging-up` | Start the app together with the Elasticsearch + Kibana + Filebeat stack |
 | `make logging-down` | Stop the logging stack (append `-v` manually to also drop the ES volume) |
 | `make logging-logs` | Follow the logs of Filebeat / Elasticsearch / Kibana |
+| `make metrics-up` | Start the app together with the Prometheus + Grafana stack |
+| `make metrics-down` | Stop the metrics stack (append `-v` manually to also drop the TSDB volume) |
+| `make metrics-logs` | Follow the logs of Prometheus / Grafana |
 
 ### Git hooks (Lefthook)
 
@@ -228,6 +231,75 @@ docker compose -f docker-compose.yml -f docker-compose.logging.yml down -v
 > On Linux, Elasticsearch may require a higher `vm.max_map_count`:
 > `sudo sysctl -w vm.max_map_count=262144`. Docker Desktop (macOS/Windows) handles this
 > automatically.
+
+---
+
+## Metrics & RED Pipeline (Prometheus + Grafana)
+
+The service is instrumented with **[RED](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/)
+metrics** (Rate, Errors, Duration) exposed in Prometheus format at **`/metrics`**, and ships
+them through a local **Prometheus → Grafana** pipeline for scraping and visualization.
+
+> ⚠️ This stack is for **local development** only. Production Prometheus/Grafana should be
+> provisioned through your DevOps/IT team.
+
+### How it works
+
+```mermaid
+graph LR
+    A[Backend<br/>promhttp /metrics] -->|scrape every 15s| B[(Prometheus<br/>TSDB)]
+    B --> C[Grafana<br/>provisioned RED dashboard]
+```
+
+- An HTTP middleware (`PrometheusMiddleware`) records every request; the **cron worker** records
+  each run and per-repository check. Metrics live under the `se_school` namespace
+  (`internal/metrics/metrics.go`).
+- **Prometheus** scrapes the backend's `/metrics` endpoint (config: `deploy/metrics/prometheus.yml`).
+- **Grafana** auto-provisions the Prometheus datasource and a **RED dashboard**
+  (`deploy/metrics/grafana/`) — no manual setup needed.
+
+### What's measured
+
+| Signal | HTTP | Cron worker |
+|---|---|---|
+| **Rate** | `se_school_http_requests_total` | `se_school_cron_job_runs_total`, `se_school_repo_check_total` |
+| **Errors** | same, by `status` label (`4xx`/`5xx`) | same, by `status` label (`success`/`error`) |
+| **Duration** | `se_school_http_request_duration_seconds` | `se_school_cron_job_duration_seconds` |
+
+`se_school_http_requests_in_flight` (gauge) additionally tracks concurrent requests.
+
+### Run the pipeline
+
+```bash
+# Brings up postgres + redis + backend + prometheus + grafana
+make metrics-up
+
+# Follow the pipeline components (optional)
+make metrics-logs
+```
+
+Endpoints once it's up:
+
+- Backend / raw metrics: `http://localhost:8080/metrics`
+- Prometheus: `http://localhost:9090` (check **Status → Targets**: `se-school` should be `UP`)
+- Grafana: `http://localhost:3000` (login `admin` / `admin`; anonymous viewing is enabled)
+
+Generate some traffic, then confirm the series exist:
+
+```bash
+curl "http://localhost:8080/swagger/index.html"
+curl -s "http://localhost:8080/metrics" | grep se_school_
+```
+
+Open Grafana → the **se-school RED** dashboard for rate / error / latency panels (HTTP + cron).
+
+### Tear down
+
+```bash
+make metrics-down          # keep the Prometheus TSDB volume
+# or, to also delete stored metrics:
+docker compose -f docker-compose.yml -f docker-compose.metrics.yml down -v
+```
 
 ---
 
