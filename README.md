@@ -14,7 +14,7 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 1. A user subscribes by providing their email and a GitHub repository (`owner/repo`).
 2. The system validates the repository via the GitHub API and sends a confirmation email with a unique token.
 3. The user confirms the subscription by following the link in the email.
-4. A cron job periodically polls the GitHub API for new releases; when a new tag is detected, all confirmed subscribers are notified via email.
+4. A cron job periodically polls the GitHub API for new releases (responses are cached in Redis to cut API calls and respect rate limits); when a new tag is detected, all confirmed subscribers are notified via email.
 5. Users can unsubscribe at any time using a token included in every notification email.
 
 **Key technologies:**
@@ -24,12 +24,14 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 | Language | Go 1.26 |
 | HTTP framework | [Gin](https://github.com/gin-gonic/gin) |
 | Database driver | [pgx v5](https://github.com/jackc/pgx) + [pgxpool](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool) on PostgreSQL 16 |
+| Cache / NoSQL store | [redis/go-redis v9](https://github.com/redis/go-redis) on Redis 7 (caches GitHub release lookups) |
 | Schema migrations | [golang-migrate](https://github.com/golang-migrate/migrate) (embedded SQL, run on startup) |
 | GitHub client | [go-github v84](https://github.com/google/go-github) |
 | Email delivery | SMTP via [gomail](https://github.com/go-gomail/gomail) |
 | Cron scheduler | [robfig/cron](https://github.com/robfig/cron) |
 | Configuration | [Viper](https://github.com/spf13/viper) + [godotenv](https://github.com/joho/godotenv) |
-| Logging | [zap](https://go.uber.org/zap) |
+| Logging | [zap](https://go.uber.org/zap) (structured JSON, shipped via Filebeat → Elasticsearch → Kibana) |
+| Metrics | [Prometheus client_golang](https://github.com/prometheus/client_golang) + Grafana (RED dashboard) |
 | API docs | [Swagger / swag](https://github.com/swaggo/swag) |
 | Linting | [golangci-lint](https://golangci-lint.run) |
 | Git hooks | [Lefthook](https://github.com/evilmartians/lefthook) |
@@ -43,6 +45,7 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 
 - **Go ≥ 1.26**
 - **PostgreSQL 16** (or use the Docker Compose setup)
+- **Redis 7** (or use the Docker Compose setup)
 - **Docker & Docker Compose** (for the containerised path)
 - A **GitHub personal access token** (classic, with `public_repo` scope is enough)
 - SMTP credentials for sending emails (e.g. Gmail App Password, Mailtrap, etc.)
@@ -54,6 +57,8 @@ Copy the example file and fill in real values:
 ```bash
 cp .env.example .env
 ```
+
+**Backend (read by the Go app):**
 
 | Variable | Description |
 |---|---|
@@ -67,10 +72,21 @@ cp .env.example .env
 | `MAILER_FROM` | Sender email address |
 | `MAILER_SMTP` | SMTP server address |
 | `MAILER_PASSWORD` | SMTP password |
+| `REDIS_ADDRESS` | Redis `host:port` for the GitHub release cache (default `redis:6379`) |
+| `REDIS_PASSWORD` | Redis password (leave empty if unset) |
+| `REDIS_DB` | Redis logical database number (default `0`) |
 | `CRON_REPO_CHECK_SCHEDULE` | Cron expression for release polling (default `0 * * * *` — every hour) |
-| `POSTGRES_USER` | Postgres user (used by the Docker Compose postgres container) |
-| `POSTGRES_PASSWORD` | Postgres password |
-| `POSTGRES_DB` | Postgres database name |
+| `FRONTEND_URL` | Base URL used to build confirmation / unsubscribe links in emails |
+
+> The `LOG_*` variables are documented under [Structured Logging & Log Pipeline → Configuration](#configuration).
+
+**Postgres container (used only by Docker Compose to initialise the database — the app itself connects via `DB_DSN`):**
+
+| Variable | Description |
+|---|---|
+| `POSTGRES_USER` | Superuser created when the postgres container first starts |
+| `POSTGRES_PASSWORD` | Superuser password |
+| `POSTGRES_DB` | Database name created on first start |
 
 ### Run locally
 
@@ -78,7 +94,8 @@ cp .env.example .env
 # 1. Install dependencies
 make dependencies        # runs go mod tidy && go mod download
 
-# 2. Make sure PostgreSQL is running and DB_DSN in .env points to it
+# 2. Make sure PostgreSQL and Redis are running, and that DB_DSN and
+#    REDIS_ADDRESS in .env point to them
 
 # 3. Start the server
 go run cmd/main.go
@@ -112,6 +129,9 @@ docker compose down
 | `make dependencies` | `go mod tidy` + `go mod download` |
 | `make lint` | Run `golangci-lint` (auto-installs if missing) |
 | `make swagger` | Regenerate Swagger docs from annotations into `docs/generated/` |
+| `make test-unit` | Run unit tests with the race detector (`go test -race ./internal/...`) |
+| `make test-integration` | Spin up `docker-compose.test.yml` (Postgres + Redis + runner) and run the integration suite (`make test-integration-down` to clean up) |
+| `make test-e2e` | Spin up `docker-compose.e2e.yml` (full stack + frontend + Mailpit) and run the end-to-end suite (`make test-e2e-down` to clean up) |
 | `make up` | Start the whole stack: backend + Postgres + Redis + logging (ES/Kibana/Filebeat) + metrics (Prometheus/Grafana) |
 | `make down` | Stop the stack (append `-v` manually to also drop the ES/TSDB/db volumes) |
 | `make logs` | Follow logs (`make logs SVC="prometheus grafana"` to scope) |
@@ -300,6 +320,32 @@ docker compose down -v
 
 ---
 
+## Testing
+
+The project has three test tiers:
+
+| Tier | Location | Runs against | Command |
+|---|---|---|---|
+| **Unit** | `internal/**/*_test.go` | Pure Go, mocked dependencies | `make test-unit` |
+| **Integration** | `tests/integration/` | Ephemeral Postgres + Redis, GitHub API mocked in-process | `make test-integration` |
+| **End-to-end** | `tests/e2e/` | Full stack via Docker Compose: backend, frontend, Postgres, Redis, [Mailpit](https://github.com/axllent/mailpit) | `make test-e2e` |
+
+- **Unit** tests run with the race detector across `./internal/...`.
+- **Integration** tests (`docker-compose.test.yml`) boot throwaway `postgres:16.3` and
+  `redis:7` containers (tmpfs, no volumes) plus a test runner (`Dockerfile.test`, env from
+  `.env.test`). The GitHub API is stubbed by a local mock (`tests/integration/helpers/mswgh.go`);
+  shared bootstrap and fixtures live in `tests/integration/helpers/`.
+- **End-to-end** tests (`docker-compose.e2e.yml`, env from a local `.env.e2e`) bring up the
+  real backend, the Vite frontend, Postgres, Redis, and Mailpit, then drive the full flow
+  (subscribe → confirm → list → unsubscribe) and assert captured emails via Mailpit. The
+  release-check cron is parked on a far-future schedule so it doesn't fire mid-run. This suite
+  is its own Go module (`tests/e2e/go.mod`).
+
+The `*-down` targets (`make test-integration-down`, `make test-e2e-down`) tear down the
+corresponding stack and drop its volumes.
+
+---
+
 ## Project Structure
 
 ```
@@ -307,6 +353,7 @@ docker compose down -v
 ├── cmd/
 │   └── main.go                          # Application entry-point
 ├── docs/
+│   ├── adrs/                            # Architecture decision records
 │   ├── source-swagger.yaml              # Hand-written OpenAPI 2.0 spec
 │   └── generated/                       # Auto-generated Swagger files (swag init)
 ├── internal/
@@ -321,11 +368,13 @@ docker compose down -v
 │   │   ├── logging/                     # Structured zap logger + request-scoped context helpers
 │   │   └── redis/                       # Redis client connection
 │   ├── integrations/
-│   │   └── github/                      # GitHub API client (go-github)
+│   │   └── github/                      # GitHub API client (go-github), Redis-cached
+│   ├── metrics/                         # Prometheus RED metric definitions (metrics.go)
 │   ├── models/                          # Domain models & DTOs
 │   │   ├── subscription.go             # Subscription model
 │   │   ├── repository.go               # Repository model
 │   │   ├── code.go                     # Confirmation / unsubscribe code model
+│   │   ├── factories/                  # Confirmation / unsubscribe code factories
 │   │   └── dto/                        # Request / response DTOs
 │   ├── notifications/                   # Email notification orchestration
 │   │   ├── mailer/                     # Low-level SMTP sending (gomail)
@@ -339,6 +388,11 @@ docker compose down -v
 │   │   ├── repository/                 # Release-check & notification dispatch
 │   │   └── subscription/               # Subscribe / confirm / unsubscribe / list
 │   └── utils/                           # Shared helpers (e.g. code generation)
+├── tests/
+│   ├── integration/                     # Integration tests (Postgres + Redis, GitHub mocked)
+│   │   └── helpers/                     # Suite bootstrap, fixtures, GitHub mock
+│   └── e2e/                             # End-to-end tests (full stack + frontend + Mailpit)
+│       └── helpers/                     # Suite bootstrap, flows, Mailpit client
 ├── deploy/
 │   ├── logging/
 │   │   └── filebeat.yml                 # Filebeat autodiscover + Elasticsearch output config
@@ -347,10 +401,13 @@ docker compose down -v
 │       └── grafana/                     # Provisioned datasource + RED dashboard
 ├── .env.example                         # Environment variable template
 ├── .golangci.yml                        # Linter configuration
-├── docker-compose.yml                   # Single full stack: app + logging + metrics
-├── Dockerfile                           # Multi-stage Docker build
+├── docker-compose.yml                   # Full local stack: app + logging + metrics
+├── docker-compose.test.yml              # Integration-test stack (Postgres + Redis + runner)
+├── docker-compose.e2e.yml               # End-to-end stack (app + frontend + Mailpit)
+├── Dockerfile                           # Multi-stage Docker build (app)
+├── Dockerfile.test                      # Integration-test runner image
 ├── lefthook.yml                         # Git hook definitions
-├── Makefile                             # Build / lint / swagger targets
+├── Makefile                             # Build / lint / swagger / test targets
 ├── go.mod / go.sum                      # Go module files
 └── README.md
 ```
@@ -363,6 +420,7 @@ graph LR
     B --> C[Repositories<br/>Data access / pgx]
     C --> D[(PostgreSQL)]
     B --> E[Integrations<br/>GitHub API]
+    E --> H[(Redis<br/>release cache)]
     B --> F[Notifications<br/>SMTP / gomail]
     G[Cron Scheduler] --> B
 ```
@@ -379,5 +437,5 @@ Interactive Swagger UI is available at **`/swagger/index.html`** when the server
 
 ## Future improvements
 
-1. Switch to the external notifications provider.
-2. Add integrations tests.
+1. Switch to an external notifications provider (currently SMTP via gomail).
+2. Wire the unit / integration / e2e suites into CI to run on every push.
