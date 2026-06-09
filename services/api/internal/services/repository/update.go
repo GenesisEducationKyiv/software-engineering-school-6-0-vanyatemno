@@ -5,6 +5,7 @@ import (
 
 	"ghnotify/contract"
 
+	"se-school/internal/metrics"
 	"se-school/internal/models"
 	"se-school/internal/notifications"
 
@@ -78,9 +79,12 @@ func (s *Service) CheckAllReposTagAndAlert(ctx context.Context) error {
 	for _, repo := range repos {
 		err = s.CheckRepoTagAndAlert(ctx, repo)
 		if err != nil {
+			metrics.RepoCheckTotal.WithLabelValues("error").Inc()
 			zap.L().Error("failed to update repository", zap.Error(err))
 			errs = append(errs, err)
+			continue
 		}
+		metrics.RepoCheckTotal.WithLabelValues("success").Inc()
 	}
 	if len(errs) > 0 {
 		zap.L().Error("errors occurred on repositories update", zap.Int("errors_count", len(errs)))
