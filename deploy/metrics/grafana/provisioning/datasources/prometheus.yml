@@ -1,0 +1,12 @@
+# Grafana datasource provisioning — auto-wires Prometheus on startup so no
+# manual UI setup is needed. Mounted by docker-compose.yml.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

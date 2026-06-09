@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"se-school/internal/infrastructure/logging"
 	"se-school/internal/models/dto"
 
 	"github.com/gin-gonic/gin"
@@ -71,7 +72,7 @@ func (sc *SubscriptionController) Subscribe(c *gin.Context) {
 func (sc *SubscriptionController) Confirm(c *gin.Context) {
 	var req dto.ConfirmSubscriptionRequest
 	if err := c.ShouldBindUri(&req); err != nil {
-		zap.L().Warn("invalid confirm request", zap.Error(err))
+		logging.FromContext(c.Request.Context()).Warn("invalid confirm request", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid token"})
 		return
 	}
@@ -100,7 +101,7 @@ func (sc *SubscriptionController) Confirm(c *gin.Context) {
 func (sc *SubscriptionController) Unsubscribe(c *gin.Context) {
 	var req dto.UnsubscribeRequest
 	if err := c.ShouldBindUri(&req); err != nil {
-		zap.L().Warn("invalid unsubscribe request", zap.Error(err))
+		logging.FromContext(c.Request.Context()).Warn("invalid unsubscribe request", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid token"})
 		return
 	}
@@ -128,7 +129,7 @@ func (sc *SubscriptionController) Unsubscribe(c *gin.Context) {
 func (sc *SubscriptionController) GetSubscriptions(c *gin.Context) {
 	var req dto.GetSubscriptionsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		zap.L().Warn("invalid get subscriptions request", zap.Error(err))
+		logging.FromContext(c.Request.Context()).Warn("invalid get subscriptions request", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email"})
 		return
 	}

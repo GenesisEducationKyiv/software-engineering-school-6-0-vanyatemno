@@ -7,7 +7,19 @@ type Config struct {
 	Github      Github      `mapstructure:"GITHUB" json:"GITHUB" yaml:"GITHUB"`
 	Mailer      Mailer      `mapstructure:"MAILER" json:"MAILER" yaml:"MAILER"`
 	Cron        Cron        `mapstructure:"CRON" json:"CRON" yaml:"CRON"`
+	Log         Log         `mapstructure:"LOG" json:"LOG" yaml:"LOG"`
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
+}
+
+// Log configures structured application logging. The defaults emit JSON to
+// stdout, which is what the Filebeat -> Elasticsearch -> Kibana pipeline
+// consumes. Set ENCODING=console for human-readable local development.
+type Log struct {
+	Level       string `mapstructure:"LEVEL" json:"LEVEL" yaml:"LEVEL" default:"info"`
+	Encoding    string `mapstructure:"ENCODING" json:"ENCODING" yaml:"ENCODING" default:"json"`
+	Environment string `mapstructure:"ENVIRONMENT" json:"ENVIRONMENT" yaml:"ENVIRONMENT" default:"development"`
+	ServiceName string `mapstructure:"SERVICE_NAME" json:"SERVICE_NAME" yaml:"SERVICE_NAME" default:"se-school"`
+	Version     string `mapstructure:"VERSION" json:"VERSION" yaml:"VERSION" default:"dev"`
 }
 
 type Database struct {

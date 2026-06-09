@@ -15,6 +15,7 @@ import (
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 
 	// pgx5 migrate driver — registered via init() under the "pgx5" scheme.
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -37,6 +38,14 @@ func Connect(cfg *config.Database) (*pgxpool.Pool, error) {
 	poolCfg.MaxConnLifetime = time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
 	poolCfg.HealthCheckPeriod = time.Minute
+
+	// Route pgx query/connection tracing through our structured zap logger so
+	// SQL activity lands in the logging pipeline carrying the request_id from
+	// context. Routine activity logs at debug; failures at error.
+	poolCfg.ConnConfig.Tracer = &tracelog.TraceLog{
+		Logger:   zapPgxLogger{},
+		LogLevel: tracelog.LogLevelTrace,
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

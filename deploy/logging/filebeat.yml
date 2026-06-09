@@ -1,0 +1,65 @@
+# Filebeat configuration for the local logging pipeline.
+#
+# Filebeat autodiscovers Docker containers and only collects the ones labelled
+# `logging: "app"` (the backend). Each container's stdout — already structured
+# JSON emitted by the application's zap logger — is decoded and shipped to
+# Elasticsearch, where it can be searched and aggregated through Kibana.
+
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      # Replace dots in container labels with underscores so they don't clash
+      # with Elasticsearch's dotted-field expansion.
+      labels.dedot: true
+      templates:
+        - condition:
+            equals:
+              docker.container.labels.logging: "app"
+          config:
+            - type: container
+              paths:
+                - "/var/lib/docker/containers/${data.docker.container.id}/*.log"
+              # The application already logs structured JSON, so decode it and
+              # promote the keys to the document root. overwrite_keys lets the
+              # app-provided @timestamp/message win over Filebeat's defaults,
+              # and expand_keys turns dotted keys (log.level, service.name) into
+              # the nested objects Elasticsearch expects.
+              json.keys_under_root: true
+              json.overwrite_keys: true
+              # add_error_key is left OFF on purpose: when a line fails to decode
+              # it would inject an "error" *object* (error.message/error.type),
+              # which clashes with the scalar "error" string the app emits via
+              # zap.Error and breaks the Elasticsearch field mapping. The app now
+              # emits 100% JSON, so a decode error shouldn't happen anyway.
+              json.add_error_key: false
+              json.expand_keys: true
+
+# Enrich every event with Docker container metadata (name, image, id) so logs
+# from different containers can be told apart and filtered in Kibana.
+processors:
+  - add_docker_metadata: ~
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  # Daily index; the Kibana data view `app-logs-*` matches this pattern.
+  index: "app-logs-%{+yyyy.MM.dd}"
+
+# A custom index name requires disabling the default index-lifecycle policy.
+setup.ilm.enabled: false
+
+# Do NOT install Filebeat's built-in ECS field template. That template maps
+# `log.origin` and `error` as OBJECTS, but our zap logger emits `log.origin` as a
+# "file:line" string and `error` as a scalar string (zap.Error). With the ECS
+# template in place, every successfully-decoded app document is rejected with
+# `object mapping for [log.origin] tried to parse field as object, but found a
+# concrete value` (HTTP 400) and silently dropped — the harvester runs but the
+# index stays empty. Disabling the template lets Elasticsearch infer field types
+# dynamically from the JSON we actually emit.
+setup.template.enabled: false
+
+# Kibana endpoint (used by `filebeat setup` if you ever load assets via Filebeat).
+setup.kibana:
+  host: "http://kibana:5601"
+
+logging.level: info
+logging.to_stderr: true

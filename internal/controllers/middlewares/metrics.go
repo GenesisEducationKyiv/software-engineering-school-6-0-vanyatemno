@@ -15,6 +15,14 @@ import (
 // to avoid high-cardinality label values.
 func PrometheusMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip the scrape endpoint itself: instrumenting it would make the
+		// in-flight gauge always read 1 (the scrape counts itself) and pollute
+		// the request total/duration with scrape traffic.
+		if c.Request.URL.Path == "/metrics" {
+			c.Next()
+			return
+		}
+
 		start := time.Now()
 
 		metrics.HTTPRequestsInFlight.Inc()
@@ -32,6 +40,6 @@ func PrometheusMiddleware() gin.HandlerFunc {
 		duration := time.Since(start).Seconds()
 
 		metrics.HTTPRequestsTotal.WithLabelValues(method, path, status).Inc()
-		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration)
+		metrics.HTTPRequestDuration.WithLabelValues(method, path, status).Observe(duration)
 	}
 }

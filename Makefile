@@ -33,3 +33,24 @@ test-e2e:
 
 test-e2e-down:
 	docker compose --env-file .env.e2e -f docker-compose.e2e.yml down -v
+
+# -- Full observability stack (app + logging + metrics) ------------------------
+#
+# Everything lives in the single docker-compose.yml: backend, Postgres, Redis,
+# Elasticsearch + Kibana + Filebeat, and Prometheus + Grafana.
+#   Swagger:    http://localhost:8080/swagger/index.html
+#   Kibana:     http://localhost:5601
+#   Prometheus: http://localhost:9090
+#   Grafana:    http://localhost:3000 (admin/admin)
+
+# Bring up the whole stack.
+up:
+	docker compose up --build -d
+
+# Tear it down (append `-v` manually to also drop the ES/TSDB/db volumes).
+down:
+	docker compose down
+
+# Follow logs (pass SVC=... to scope, e.g. `make logs SVC="prometheus grafana"`).
+logs:
+	docker compose logs -f $(SVC)

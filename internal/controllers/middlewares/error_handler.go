@@ -3,6 +3,7 @@ package middlewares
 import (
 	"errors"
 	"net/http"
+	"se-school/internal/infrastructure/logging"
 	"se-school/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,7 @@ func ErrorHandlerMiddleware() gin.HandlerFunc {
 		case errors.Is(err, models.ErrAlreadyExists):
 			c.JSON(http.StatusConflict, gin.H{"error": "Email already subscribed to this repository"})
 		default:
-			zap.L().Error("unhandled service error", zap.Error(err))
+			logging.FromContext(c.Request.Context()).Error("unhandled service error", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 	}

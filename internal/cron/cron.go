@@ -2,11 +2,17 @@ package cron
 
 import (
 	"context"
+	"time"
+
 	"se-school/internal/config"
+	"se-school/internal/metrics"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )
+
+// checkReposJob is the metric label identifying the repo-check cron job.
+const checkReposJob = "check_repos"
 
 type Scheduler struct {
 	appCtx            context.Context
@@ -43,12 +49,17 @@ func (s *Scheduler) registerJobs(cfg *config.Cron) {
 func (s *Scheduler) checkAllReposTagAndAlert() {
 	zap.L().Info("cron: starting CheckAllReposTagAndAlert")
 
+	start := time.Now()
 	err := s.repositoryService.CheckAllReposTagAndAlert(s.appCtx)
+
+	metrics.CronJobDuration.WithLabelValues(checkReposJob).Observe(time.Since(start).Seconds())
 	if err != nil {
+		metrics.CronJobRunsTotal.WithLabelValues(checkReposJob, "error").Inc()
 		zap.L().Error("cron: CheckAllReposTagAndAlert failed", zap.Error(err))
 		return
 	}
 
+	metrics.CronJobRunsTotal.WithLabelValues(checkReposJob, "success").Inc()
 	zap.L().Info("cron: CheckAllReposTagAndAlert completed successfully")
 }
 
