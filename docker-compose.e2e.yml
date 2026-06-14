@@ -31,6 +31,33 @@ services:
       timeout: 1s
       retries: 30
 
+  kafka-e2e:
+    image: confluentinc/cp-kafka:7.7.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-e2e:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-e2e:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    # No tmpfs/volume: cp-kafka's writability precheck (dub) fails on a root-owned
+    # tmpfs since it runs as appuser. The default image dir is appuser-owned and
+    # the container is ephemeral (removed on `down -v`), which is fine for e2e.
+    networks:
+      - github-subscriptions-e2e
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
   mailpit:
     image: axllent/mailpit:latest
     networks:
@@ -48,6 +75,7 @@ services:
       REDIS_ADDRESS: "redis-e2e:6379"
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
+      KAFKA_BROKERS: "kafka-e2e:9092"
       # Disable the release-check cron during e2e by scheduling it for
       # a date that won't fire during the run.
       CRON_REPO_CHECK_SCHEDULE: "0 0 1 1 *"
@@ -57,10 +85,12 @@ services:
         condition: service_healthy
       redis-e2e:
         condition: service_healthy
+      kafka-e2e:
+        condition: service_healthy
     networks:
       - github-subscriptions-e2e
 
-  # Notifications microservice: consumes jobs the API publishes to Redis and
+  # Notifications microservice: consumes jobs the API produces to Kafka and
   # delivers them to mailpit, which the e2e tests assert against.
   notifier:
     build:
@@ -76,9 +106,12 @@ services:
       REDIS_ADDRESS: "redis-e2e:6379"
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
+      KAFKA_BROKERS: "kafka-e2e:9092"
       LOG_ENCODING: "console"
     depends_on:
       redis-e2e:
+        condition: service_healthy
+      kafka-e2e:
         condition: service_healthy
       mailpit:
         condition: service_started

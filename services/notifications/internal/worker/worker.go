@@ -92,29 +92,33 @@ func New(
 func (w *Worker) Run(ctx context.Context) error {
 	zap.L().Info("consuming notifications topic")
 	for {
+		// Stop cleanly on shutdown. Checking the cancellation channel here (rather
+		// than the error of the blocking calls below) keeps the only `return nil`
+		// out of any `err != nil` branch.
+		select {
+		case <-ctx.Done():
+			zap.L().Info("worker shutting down", zap.Error(ctx.Err()))
+			return nil
+		default:
+		}
+
 		msg, err := w.reader.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				zap.L().Info("worker shutting down", zap.Error(ctx.Err()))
-				return nil
+				continue // shutting down — loop back so the select returns cleanly
 			}
 			return fmt.Errorf("fetch message: %w", err)
 		}
 
-		if perr := w.processWithRetry(ctx, msg.Value); perr != nil {
-			if ctx.Err() != nil {
-				// Shutting down mid-message: don't dead-letter or commit; the
-				// message will be redelivered on restart (dedup makes that safe).
-				return nil
-			}
+		// On shutdown mid-message, skip dead-lettering/commit and let the message
+		// be redelivered on restart (dedup makes that safe).
+		perr := w.processWithRetry(ctx, msg.Value)
+		if perr != nil && ctx.Err() == nil {
 			w.deadLetter(ctx, msg, perr)
 		}
 
-		if err := w.reader.CommitMessages(ctx, msg); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			zap.L().Error("failed to commit offset", zap.Error(err))
+		if commitErr := w.reader.CommitMessages(ctx, msg); commitErr != nil && ctx.Err() == nil {
+			zap.L().Error("failed to commit offset", zap.Error(commitErr))
 		}
 	}
 }

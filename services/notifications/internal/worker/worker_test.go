@@ -269,7 +269,7 @@ func TestRun_DuplicateDelivery_EmailsEachRecipientOnce(t *testing.T) {
 func TestRun_PartialFailureThenRedelivery_NoDuplicateToSucceeded(t *testing.T) {
 	recv := []string{"a@x.com", "b@x.com"}
 	msg := mustMessage(t, contract.RepositoryUpdated, recv, repoPayload())
-	td := setupTest([]kafka.Message{msg, msg}, 0) // no in-process retry; rely on redelivery
+	td := setupTest([]kafka.Message{msg, msg}, 0)    // no in-process retry; rely on redelivery
 	td.mailer.failFor = map[string]int{"b@x.com": 1} // b fails on first delivery only
 
 	if err := td.worker.Run(td.ctx); err != nil {
