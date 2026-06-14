@@ -17,12 +17,6 @@ const Topic = "notifications.events"
 // fail terminally (bad payload, unknown template) or exhaust their retries.
 const DLQTopic = "notifications.events.dlq"
 
-// Channel is the legacy Redis Pub/Sub channel name.
-//
-// Deprecated: the transport is Kafka now — use Topic. Kept only until the
-// publisher and consumer have migrated off it.
-const Channel = "notifications:events"
-
 // TemplateName identifies which email template the notifications service should
 // render for a given message.
 type TemplateName = string

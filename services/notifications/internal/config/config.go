@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
@@ -24,9 +25,25 @@ const (
 )
 
 type Config struct {
+	Kafka  Kafka  `mapstructure:"KAFKA"`
 	Redis  Redis  `mapstructure:"REDIS"`
 	Mailer Mailer `mapstructure:"MAILER"`
 	Log    Log    `mapstructure:"LOG"`
+
+	// DedupTTL bounds how long per-recipient idempotency markers live in Redis.
+	// It must comfortably exceed any redelivery/republish window.
+	DedupTTL time.Duration `mapstructure:"DEDUP_TTL" default:"168h"`
+}
+
+// Kafka configures the consumer. Brokers is a comma-separated list (a single
+// address is the common case); GroupID is the consumer group; MaxRetries bounds
+// transient-failure retries before a message is dead-lettered.
+type Kafka struct {
+	Brokers    string `mapstructure:"BROKERS" default:"localhost:9092"`
+	Topic      string `mapstructure:"TOPIC" default:"notifications.events"`
+	DLQTopic   string `mapstructure:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	GroupID    string `mapstructure:"GROUP_ID" default:"notifications-service"`
+	MaxRetries int    `mapstructure:"MAX_RETRIES" default:"3"`
 }
 
 type Redis struct {
