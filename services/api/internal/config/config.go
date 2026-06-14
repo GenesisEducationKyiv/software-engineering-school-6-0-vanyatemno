@@ -7,7 +7,17 @@ type Config struct {
 	Github      Github      `mapstructure:"GITHUB" json:"GITHUB" yaml:"GITHUB"`
 	Cron        Cron        `mapstructure:"CRON" json:"CRON" yaml:"CRON"`
 	Log         Log         `mapstructure:"LOG" json:"LOG" yaml:"LOG"`
+	Kafka       Kafka       `mapstructure:"KAFKA" json:"KAFKA" yaml:"KAFKA"`
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
+}
+
+// Kafka configures the producer that publishes notification jobs. Brokers is a
+// comma-separated list (a single address is the common case); Topic and
+// DLQTopic default to the canonical names in ghnotify/contract.
+type Kafka struct {
+	Brokers  string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
+	Topic    string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
+	DLQTopic string `mapstructure:"DLQ_TOPIC" json:"DLQ_TOPIC" yaml:"DLQ_TOPIC" default:"notifications.events.dlq"`
 }
 
 // Log configures structured application logging. The defaults emit JSON to

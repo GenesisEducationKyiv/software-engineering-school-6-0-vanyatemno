@@ -7,6 +7,7 @@ import (
 	"se-school/internal/controllers"
 	cronScheduler "se-school/internal/cron"
 	"se-school/internal/infrastructure/db"
+	kafkaInfra "se-school/internal/infrastructure/kafka"
 	"se-school/internal/infrastructure/logging"
 	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
@@ -83,9 +84,15 @@ func main() {
 		zap.L().Fatal("failed to initialize github integration", zap.Error(err))
 	}
 
-	// Notifications publisher: emits notification jobs onto a Redis Pub/Sub
-	// channel that the standalone notifications service consumes and delivers.
-	notificationService := publisher.New(ctx, redisClient)
+	// Notifications publisher: emits notification jobs onto a Kafka topic that
+	// the standalone notifications service consumes and delivers. Redis above is
+	// retained for the GitHub integration's response cache.
+	if err := kafkaInfra.EnsureTopics(ctx, &cfg.Kafka); err != nil {
+		zap.L().Fatal("failed to ensure kafka topics", zap.Error(err))
+	}
+	kafkaWriter := kafkaInfra.NewWriter(&cfg.Kafka)
+	defer func() { _ = kafkaWriter.Close() }()
+	notificationService := publisher.New(ctx, kafkaWriter)
 
 	// Services
 	subscriptionService := subscriptionSvc.New(
