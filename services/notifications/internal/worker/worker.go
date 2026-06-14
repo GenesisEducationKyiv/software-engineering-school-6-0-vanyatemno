@@ -40,7 +40,9 @@ type DLQProducer interface {
 	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-const retryBackoff = 500 * time.Millisecond
+// retryBackoff is the pause between retry attempts. It is a var (not a const) so
+// tests can shrink it.
+var retryBackoff = 500 * time.Millisecond
 
 // retryableError marks a processing failure worth retrying (a transient send or
 // dedup-store error) as opposed to a permanent one (bad payload, bad template).
