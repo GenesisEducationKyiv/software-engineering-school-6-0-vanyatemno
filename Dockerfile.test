@@ -2,11 +2,13 @@ FROM golang:1.26-alpine
 
 RUN apk add --no-cache git
 
-WORKDIR /app
+WORKDIR /src
+# Build context is the repository root so the shared contract module referenced
+# by the `replace` directive in services/api/go.mod is available.
+COPY pkg/contract ./pkg/contract
+COPY services/api ./services/api
 
-COPY go.mod go.sum ./
+WORKDIR /src/services/api
 RUN go mod download
-
-COPY . .
 
 CMD ["go", "test", "-count=1", "-v", "./tests/integration/..."]

@@ -13,11 +13,8 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: services/api/go.mod
           cache: true
-
-      - name: Download modules
-        run: go mod download
 
       - name: Run unit tests
         run: make test-unit

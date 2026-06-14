@@ -1,0 +1,14 @@
+# Grafana dashboard provider — loads any dashboard JSON found under
+# /var/lib/grafana/dashboards on startup. Mounted by docker-compose.yml.
+apiVersion: 1
+
+providers:
+  - name: se-school
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

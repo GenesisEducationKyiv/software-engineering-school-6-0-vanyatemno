@@ -4,6 +4,6 @@ pre-commit:
     - name: lint
       run: make lint
     - name: swagger docs update
-      run: make swagger && git add docs/*
+      run: make swagger && git add services/api/docs/*
     - name: unit tests
-      run: make unit-test
+      run: make test-unit
