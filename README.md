@@ -23,7 +23,7 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 
 The system is split into **two independently deployable microservices** plus a shared
 contract module. Email delivery — the notifications domain — has been extracted out of the
-API into its own service. The two communicate asynchronously over a **Redis Pub/Sub** channel;
+API into its own service. The two communicate asynchronously over a **Kafka topic**;
 they share no database and make no in-process calls, only the wire types in `pkg/contract`.
 
 ```mermaid
@@ -33,29 +33,34 @@ graph LR
       CR[Cron scheduler] --> S
       S --> P[Notifications publisher]
     end
-    P -->|PUBLISH contract.Message<br/>channel notifications:events| R[(Redis)]
-    R -->|SUBSCRIBE| W[Worker]
+    P -->|produce contract.Message<br/>topic notifications.events| K[Kafka]
+    K -->|consume + commit| W[Worker]
     subgraph notif[Notifications service · module ghnotify/notifier]
       W --> T[Template rendering]
       W --> M[SMTP mailer]
     end
+    W -->|claim per recipient| RD[(Redis<br/>idempotency store)]
     S --> DB[(PostgreSQL)]
     S --> GH[GitHub API]
     M --> MX[SMTP server]
 ```
 
 - **API service** (`services/api`, Go module `se-school`): the HTTP API, the release-check
-  cron, the database and the GitHub integration. When it needs to send an email it **publishes**
-  a `contract.Message` (template name + receivers + payload) to Redis instead of sending it.
+  cron, the database and the GitHub integration. When it needs to send an email it **produces**
+  a `contract.Message` (template name + receivers + payload + idempotency key) to Kafka instead
+  of sending it.
 - **Notifications service** (`services/notifications`, Go module `ghnotify/notifier`):
-  subscribes to the channel, renders the HTML template (embedded in the binary) and delivers the
-  email over SMTP. It owns no database and no domain logic.
+  consumes the topic, renders the HTML template (embedded in the binary) and delivers the email
+  over SMTP. It deduplicates per recipient (Redis) so each email is sent **at most once**, and
+  owns no database.
 - **Contract** (`pkg/contract`, Go module `ghnotify/contract`): the pure, JSON-serializable
-  types both sides agree on (the channel name, template names and payloads).
+  types both sides agree on (topic names, template names, payloads and the idempotency-key helper).
 
-> **Delivery semantics:** Pub/Sub is fire-and-forget (at-most-once) — if the notifier is down
-> when a message is published, that message is lost. The wire contract is identical to a Redis
-> Streams setup, so upgrading to durable, acknowledged delivery later is a localized change.
+> **Delivery semantics:** Kafka gives durable, acknowledged, at-least-once delivery (manual offset
+> commit). Because at-least-once can redeliver, the consumer claims a per-recipient idempotency
+> marker in Redis before sending — so every email goes out **at most once** even on redelivery or
+> re-publish. Messages that fail terminally or exhaust their retries are routed to a dead-letter
+> topic (`notifications.events.dlq`).
 
 **Key technologies:**
 
@@ -64,11 +69,11 @@ graph LR
 | Language | Go 1.26 |
 | HTTP framework | [Gin](https://github.com/gin-gonic/gin) |
 | Database driver | [pgx v5](https://github.com/jackc/pgx) + [pgxpool](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool) on PostgreSQL 16 |
-| Cache / NoSQL store | [redis/go-redis v9](https://github.com/redis/go-redis) on Redis 7 (caches GitHub release lookups) |
+| Cache / NoSQL store | [redis/go-redis v9](https://github.com/redis/go-redis) on Redis 7 (GitHub release-lookup cache + notifier idempotency store) |
 | Schema migrations | [golang-migrate](https://github.com/golang-migrate/migrate) (embedded SQL, run on startup) |
 | GitHub client | [go-github v84](https://github.com/google/go-github) |
 | Email delivery | SMTP via [gomail](https://github.com/go-gomail/gomail) (in the notifications service) |
-| Inter-service messaging | Redis Pub/Sub via [go-redis v9](https://github.com/redis/go-redis) |
+| Inter-service messaging | Apache Kafka via [segmentio/kafka-go](https://github.com/segmentio/kafka-go) (durable, at-least-once + consumer-side dedup) |
 | Cron scheduler | [robfig/cron](https://github.com/robfig/cron) |
 | Configuration | [Viper](https://github.com/spf13/viper) + [godotenv](https://github.com/joho/godotenv) |
 | Logging | [zap](https://go.uber.org/zap) (structured JSON, shipped via Filebeat → Elasticsearch → Kibana) |
@@ -132,19 +137,20 @@ cp .env.example .env
 ### Run locally
 
 The two services are separate Go modules. Each runs from its own module directory; both need a
-running Redis (the API publishes to it, the notifier subscribes).
+running Kafka broker (the API produces, the notifier consumes) plus Redis (GitHub cache and the
+notifier's idempotency store).
 
 ```bash
 # 1. Install dependencies for every module
 make dependencies        # go mod tidy && go mod download per module
 
-# 2. Make sure PostgreSQL and Redis are running, and that DB_DSN and
-#    REDIS_ADDRESS in .env point to them
+# 2. Make sure PostgreSQL, Kafka and Redis are running, and that DB_DSN,
+#    KAFKA_BROKERS and REDIS_ADDRESS in .env point to them
 
-# 3. Start the API (HTTP + cron + publisher)
+# 3. Start the API (HTTP + cron + Kafka producer)
 cd services/api && go run ./cmd
 
-# 4. In another terminal, start the notifications service (consumer + SMTP)
+# 4. In another terminal, start the notifications service (Kafka consumer + SMTP)
 cd services/notifications && go run ./cmd
 ```
 
@@ -156,14 +162,14 @@ Swagger UI is available at `http://localhost:8080/swagger/index.html`.
 A single compose file brings up the whole cluster:
 
 ```bash
-# Build and start redis + postgres + api + notifier
+# Build and start kafka + redis + postgres + api + notifier
 docker compose up --build
 ```
 
 This will:
-- Start **Redis 7** and **PostgreSQL 16** containers with health-checks.
-- Build and start the **api** service (HTTP API + cron), exposed on `SERVER_PORT`.
-- Build and start the **notifier** service (Redis consumer + SMTP sender).
+- Start **Kafka** (KRaft), **Redis 7** and **PostgreSQL 16** containers with health-checks.
+- Build and start the **api** service (HTTP API + cron + Kafka producer), exposed on `SERVER_PORT`.
+- Build and start the **notifier** service (Kafka consumer + SMTP sender).
 
 To stop:
 
@@ -411,12 +417,12 @@ corresponding stack and drop its volumes.
 │   │   │   ├── config/                  # Configuration structs & .env loader (Viper)
 │   │   │   ├── controllers/             # HTTP handlers (Gin), middlewares & routing
 │   │   │   ├── cron/                    # Cron scheduler (robfig/cron)
-│   │   │   ├── infrastructure/          # db (pgxpool + migrations), logging, redis
+│   │   │   ├── infrastructure/          # db (pgxpool + migrations), logging, redis, kafka
 │   │   │   ├── integrations/github/     # GitHub API client (go-github)
 │   │   │   ├── metrics/                 # Prometheus RED metric definitions (metrics.go)
 │   │   │   ├── models/                  # Domain models & DTOs
 │   │   │   ├── notifications/           # Publisher + payload builders + test mock
-│   │   │   │   └── publisher/           # Redis Pub/Sub publisher (implements SendEmail)
+│   │   │   │   └── publisher/           # Kafka publisher (implements SendEmail)
 │   │   │   ├── repositories/            # Data-access layer (pgx queries)
 │   │   │   ├── services/                # Business logic (subscription, repository)
 │   │   │   └── utils/                   # Shared helpers (e.g. code generation)
@@ -424,13 +430,15 @@ corresponding stack and drop its volumes.
 │   │   ├── Dockerfile
 │   │   └── go.mod / go.sum
 │   └── notifications/                   # Notifications service · Go module ghnotify/notifier
-│       ├── cmd/main.go                  # Entry-point: subscribe + render + send
+│       ├── cmd/main.go                  # Entry-point: consume + render + send
 │       ├── internal/
-│       │   ├── config/                  # Slim config (Redis, Mailer, Log)
+│       │   ├── config/                  # Slim config (Kafka, Redis, Mailer, Log)
+│       │   ├── dedup/                   # Idempotency store (Redis SET NX) — at-most-once
+│       │   ├── infrastructure/kafka/    # Consumer (reader) + dead-letter producer
 │       │   ├── logging/                 # Structured zap logger
 │       │   ├── mailer/                  # Low-level SMTP sending (gomail)
 │       │   ├── templates/               # HTML templates & rendering (htmls/ embedded)
-│       │   └── worker/                  # Pub/Sub consumer loop
+│       │   └── worker/                  # Kafka consumer loop (decode → render → send, ack/retry/DLQ)
 │       ├── Dockerfile
 │       └── go.mod / go.sum
 ├── tests/e2e/                           # Black-box e2e tests (own module)
@@ -438,7 +446,7 @@ corresponding stack and drop its volumes.
 │   ├── logging/filebeat.yml             # Filebeat autodiscover + Elasticsearch output
 │   └── metrics/                         # Prometheus scrape config + provisioned Grafana RED dashboard
 ├── .env.example                         # Environment variable template (shared by both services)
-├── docker-compose.yml                   # Single cluster: redis + postgres + api + notifier + logging + metrics
+├── docker-compose.yml                   # Single cluster: kafka + redis + postgres + api + notifier + logging + metrics
 ├── docker-compose.e2e.yml               # End-to-end test stack
 ├── docker-compose.test.yml              # Integration test stack
 ├── Dockerfile.test                      # Integration test runner image
@@ -456,10 +464,11 @@ graph LR
     C --> D[(PostgreSQL)]
     B --> E[Integrations<br/>GitHub API]
     E --> H[(Redis<br/>release cache)]
-    B --> F[Publisher<br/>Redis PUBLISH]
+    B --> F[Publisher<br/>Kafka produce]
     G[Cron Scheduler] --> B
-    F --> R[(Redis)]
-    R --> W[Notifier worker<br/>render + SMTP]
+    F --> K[Kafka topic]
+    K --> W[Notifier worker<br/>dedup + render + SMTP]
+    W --> RD[(Redis<br/>idempotency store)]
 ```
 
 ---
@@ -472,7 +481,7 @@ Interactive Swagger UI is available at **`/swagger/index.html`** when the server
 
 ## Future improvements
 
-1. Upgrade the notifications transport from Redis Pub/Sub (at-most-once) to Redis Streams with
-   consumer groups for durable, acknowledged, retryable delivery.
-2. Add a dead-letter channel for notification jobs that fail to send after retries.
+1. Add a Kafka idempotent producer (or transactional outbox) so duplicate *publishes* are
+   eliminated at the source — the consumer already dedups, this tightens the producer side.
+2. Add tooling to inspect and replay the dead-letter topic (`notifications.events.dlq`).
 3. Wire the unit / integration / e2e suites into CI to run on every push.

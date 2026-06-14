@@ -122,8 +122,9 @@ Total bandwidth is dominated by GitHub API polling. Well within typical VPS or c
 ## 3. High-Level Architecture
 
 The notifications domain runs as a **separate microservice**. The API never sends email
-itself — it **publishes** a notification job to a Redis Pub/Sub channel, and the standalone
-notifications service consumes it and delivers the email over SMTP.
+itself — it **produces** a notification job to a Kafka topic, and the standalone notifications
+service consumes it and delivers the email over SMTP, deduplicating per recipient so each email
+is sent at most once.
 
 ```mermaid
 graph TD
@@ -132,7 +133,8 @@ graph TD
     Cron["Cron Scheduler\n(robfig/cron)"]
     GH["GitHub API\n(google/go-github)"]
     DB[("PostgreSQL 16\n(pgx)")]
-    Cache[("Redis 7\ncache + Pub/Sub broker")]
+    Kafka[["Kafka\n(KRaft broker)"]]
+    Cache[("Redis 7\ncache + dedup store")]
     Notif["Notifications Service\n(consumer + go-gomail)"]
     SMTP["SMTP Server"]
     Prom["Prometheus\n/metrics"]
@@ -141,14 +143,15 @@ graph TD
     API -- "CRUD" --> DB
     API -- "Cache read/write" --> Cache
     API -- "Validate repo" --> GH
-    API -- "PUBLISH notification job" --> Cache
+    API -- "produce notification job" --> Kafka
 
     Cron -- "Every hour" --> GH
     Cron -- "Read repos & subscribers" --> DB
     Cron -- "Write new release version" --> DB
-    Cron -- "PUBLISH notification job" --> Cache
+    Cron -- "produce notification job" --> Kafka
 
-    Cache -- "SUBSCRIBE notifications:events" --> Notif
+    Kafka -- "consume notifications.events" --> Notif
+    Notif -- "claim dedup marker" --> Cache
     Notif -- "Render template + send email" --> SMTP
 
     API -- "Expose metrics" --> Prom
@@ -160,9 +163,10 @@ graph TD
 |---|---|
 | **API Service** | Handles all HTTP traffic; validates input; orchestrates subscribe/confirm/unsubscribe flows; publishes notification jobs |
 | **Cron Scheduler** | Runs inside the API process; fires hourly to poll GitHub and publish release-notification jobs |
-| **Notifications Service** | Standalone microservice; subscribes to the Redis channel, renders the HTML template and sends email over SMTP |
+| **Notifications Service** | Standalone microservice; consumes the Kafka topic, renders the HTML template and sends email over SMTP; dedups per recipient for at-most-once delivery |
 | **PostgreSQL** | Primary persistent store for repositories, subscriptions, and tokens (accessed only by the API) |
-| **Redis** | Short-lived cache (10 min TTL) for GitHub release versions **and** the Pub/Sub broker for notification jobs |
+| **Kafka** | Durable, at-least-once transport for notification jobs (topic `notifications.events`, dead-letter `notifications.events.dlq`) |
+| **Redis** | Short-lived cache (10 min TTL) for GitHub release versions **and** the notifier's idempotency store (per-recipient dedup markers) |
 | **GitHub API** | Source of truth for repository existence and latest release tags |
 | **SMTP Server** | External email delivery, reached only by the notifications service |
 | **Prometheus** | Scrapes `/metrics` for HTTP counters, histograms, and in-flight gauges |
