@@ -15,6 +15,9 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [services/api, services/notifications]
     steps:
       - uses: actions/checkout@v6
 
@@ -25,4 +28,5 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
-          args: --config .golangci.yml ./...
+          working-directory: ${{ matrix.module }}
+          args: --config ${{ github.workspace }}/.golangci.yml ./...

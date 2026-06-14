@@ -1,6 +1,9 @@
 volumes:
   postgres_data:
   redis_data:
+  elasticsearch_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   github-subscriptions:
@@ -27,6 +30,10 @@ services:
 
   postgres:
     image: postgres:16.3-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - '5432:5432'
     expose:
@@ -43,22 +50,176 @@ services:
       timeout: 1s
       retries: 20
 
-  backend:
+  # HTTP API + release-check cron. Publishes notification jobs to Redis.
+  api:
     build:
       context: ./
-      dockerfile: ./Dockerfile
+      dockerfile: ./services/api/Dockerfile
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - '${SERVER_PORT}:${SERVER_PORT}'
     expose:
       - '${SERVER_PORT}'
     env_file:
       - ./.env
+    # Override host-oriented .env values so the container talks to the
+    # in-network postgres/redis regardless of the developer's local .env.
+    environment:
+      DB_DSN: "host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable"
+      REDIS_ADDRESS: "redis:6379"
+      REDIS_PASSWORD: ""
+      LOG_LEVEL: "info"
+      LOG_ENCODING: "json"
+      LOG_ENVIRONMENT: "docker"
+      LOG_SERVICE_NAME: "se-school"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    labels:
+      logging: "app"
     networks:
       github-subscriptions:
         aliases:
+          - api
           - backend
+
+  # Notifications microservice. Subscribes to the Redis channel and sends email.
+  notifier:
+    build:
+      context: ./
+      dockerfile: ./services/notifications/Dockerfile
+    env_file:
+      - ./.env
+    # Talk to the in-network redis regardless of the developer's local .env.
+    environment:
+      REDIS_ADDRESS: "redis:6379"
+      REDIS_PASSWORD: ""
+      LOG_LEVEL: "info"
+      LOG_ENCODING: "json"
+      LOG_ENVIRONMENT: "docker"
+      LOG_SERVICE_NAME: "se-school-notifier"
+    depends_on:
+      redis:
+        condition: service_healthy
+    labels:
+      logging: "app"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      github-subscriptions:
+        aliases:
+          - notifier
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      github-subscriptions:
+        aliases:
+          - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch.software-engineering-school-6-0-vanyatemno.orb.local:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      github-subscriptions:
+        aliases:
+          - kibana
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:5601/api/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./deploy/logging/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      github-subscriptions:
+        aliases:
+          - filebeat
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/metrics/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      github-subscriptions:
+        aliases:
+          - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/metrics/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/metrics/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      github-subscriptions:
+        aliases:
+          - grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20

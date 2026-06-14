@@ -39,18 +39,12 @@ services:
   backend:
     build:
       context: ./
-      dockerfile: ./Dockerfile
+      dockerfile: ./services/api/Dockerfile
     environment:
       DB_DSN: "host=postgres-e2e user=e2e password=e2e dbname=e2e port=5432 sslmode=disable"
       SERVER_PORT: "8080"
       SERVER_API_KEY: "e2e-key"
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
-      MAILER_HOST: "mailpit"
-      MAILER_PORT: "1025"
-      MAILER_USERNAME: ""
-      MAILER_FROM: "noreply@e2e.local"
-      MAILER_SMTP: "mailpit"
-      MAILER_PASSWORD: ""
       REDIS_ADDRESS: "redis-e2e:6379"
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
@@ -61,6 +55,29 @@ services:
     depends_on:
       postgres-e2e:
         condition: service_healthy
+      redis-e2e:
+        condition: service_healthy
+    networks:
+      - github-subscriptions-e2e
+
+  # Notifications microservice: consumes jobs the API publishes to Redis and
+  # delivers them to mailpit, which the e2e tests assert against.
+  notifier:
+    build:
+      context: ./
+      dockerfile: ./services/notifications/Dockerfile
+    environment:
+      MAILER_HOST: "mailpit"
+      MAILER_PORT: "1025"
+      MAILER_USERNAME: ""
+      MAILER_FROM: "noreply@e2e.local"
+      MAILER_SMTP: "mailpit"
+      MAILER_PASSWORD: ""
+      REDIS_ADDRESS: "redis-e2e:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      LOG_ENCODING: "console"
+    depends_on:
       redis-e2e:
         condition: service_healthy
       mailpit:
@@ -90,6 +107,8 @@ services:
       E2E_DB_DSN: "postgres://e2e:e2e@postgres-e2e:5432/e2e?sslmode=disable"
     depends_on:
       backend:
+        condition: service_started
+      notifier:
         condition: service_started
       frontend:
         condition: service_started

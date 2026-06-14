@@ -14,9 +14,9 @@ Clone, then run the command for the test type you want. Each command is self-con
 make test-unit
 ```
 
-What it runs: `go test -race -count=1 ./internal/...` on the host. Uses in-package mocks (`internal/**/mock.go`), no external services. Race detector on. Test cache disabled (`-count=1`) so reruns always re-execute.
+What it runs: `go test -race -count=1` per module — the API (`services/api/internal/...`), the notifications service (`services/notifications/...`) and the contract module. Uses in-package mocks (`**/mock.go`), no external services. Race detector on. Test cache disabled (`-count=1`) so reruns always re-execute.
 
-Scope: every package under `internal/` that has `*_test.go` (services, repositories, integrations, utils, templates).
+Scope: every package with `*_test.go` across the modules (API services, repositories, integrations, utils; the notifier's templates).
 
 ## Integration tests
 
@@ -52,7 +52,7 @@ What it runs:
 1. `docker compose --env-file .env.e2e -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from tests` brings up the full stack:
    - `postgres:16.3-alpine` + `redis:7-alpine` (tmpfs, healthchecked).
    - `axllent/mailpit` as the SMTP target so tests can assert email delivery and pull confirmation tokens out of the rendered HTML.
-   - The backend, built from `Dockerfile`, pointed at the in-network Postgres/Redis/Mailpit and the **real** GitHub API. The release-check cron is parked at `0 0 1 1 *` so it doesn't fire during a run.
+   - The backend (api), built from `services/api/Dockerfile`, pointed at the in-network Postgres/Redis and the **real** GitHub API, plus the notifier (`services/notifications/Dockerfile`) which consumes published jobs from Redis and delivers email to Mailpit. The release-check cron is parked at `0 0 1 1 *` so it doesn't fire during a run.
    - The frontend (`tests/e2e/Dockerfile.frontend`) clones [`vanyatemno/se-school-2026-frontend`](https://github.com/vanyatemno/se-school-2026-frontend), builds it with `VITE_API_URL=http://backend:8080/api` / `VITE_API_KEY=e2e-key`, and serves the static bundle from nginx on `:4173` with SPA fallback.
    - The `tests` runner (`tests/e2e/Dockerfile.runner`) installs Playwright browsers + OS deps and runs `go test ./tests/e2e/...` against the stack.
 2. `docker compose ... down -v` tears everything down.
