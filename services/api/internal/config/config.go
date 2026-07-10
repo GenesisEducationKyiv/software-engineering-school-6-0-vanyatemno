@@ -11,7 +11,16 @@ type Config struct {
 	Log         Log         `mapstructure:"LOG" json:"LOG" yaml:"LOG"`
 	Kafka       Kafka       `mapstructure:"KAFKA" json:"KAFKA" yaml:"KAFKA"`
 	Saga        Saga        `mapstructure:"SAGA" json:"SAGA" yaml:"SAGA"`
+	Notifier    Notifier    `mapstructure:"NOTIFIER" json:"NOTIFIER" yaml:"NOTIFIER"`
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
+}
+
+// Notifier configures the synchronous gRPC client the cron repository-update
+// path uses to deliver alerts. Addr is the notifier's host:port; Timeout bounds
+// each Notify call so a hung notifier cannot stall the cron sweep.
+type Notifier struct {
+	Addr    string        `mapstructure:"ADDR" json:"ADDR" yaml:"ADDR" default:"localhost:9090"`
+	Timeout time.Duration `mapstructure:"TIMEOUT" json:"TIMEOUT" yaml:"TIMEOUT" default:"10s"`
 }
 
 // Kafka configures the producer that publishes notification jobs and the

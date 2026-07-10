@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"ghnotify/contract"
 
@@ -18,51 +19,76 @@ func (s *Service) CheckRepoTagAndAlert(ctx context.Context, repo *models.Reposit
 		zap.L().Error("failed to fetch current repository version", zap.Error(err))
 		return err
 	}
-	if currentVersion == repo.Version {
-		return nil
+
+	// Persist the newest observed version. repo.Version is now only a record of
+	// the latest tag: repeat-suppression rides on each subscription's
+	// last_seen_tag (see sendUpdates), so a subscriber whose alert failed to
+	// deliver is retried on the next run even though the repo version is current.
+	if currentVersion != repo.Version {
+		repo, err = s.repositoriesRepository.UpdateTag(ctx, repo.ID, currentVersion)
+		if err != nil {
+			zap.L().Error("failed to update repository version", zap.Error(err))
+			return err
+		}
 	}
-	repo, err = s.repositoriesRepository.UpdateTag(ctx, repo.ID, currentVersion)
-	if err != nil {
-		zap.L().Error("failed to update repository version", zap.Error(err))
-		return err
-	}
-	err = s.sendRepositoryNotificationUpdates(ctx, repo)
-	if err != nil {
+
+	// Reconcile on every run: notify any subscription whose last_seen_tag lags
+	// the current version — a fresh release, or a prior alert that failed.
+	if err := s.sendRepositoryNotificationUpdates(ctx, repo, currentVersion); err != nil {
 		zap.L().Error("failed to send repository notification updates", zap.Error(err))
 	}
 
 	return nil
 }
 
-func (s *Service) sendRepositoryNotificationUpdates(ctx context.Context, repo *models.Repository) error {
-	subs, err := s.subscriptionsRepository.GetUnupdated(ctx, repo.ID, repo.Version)
+func (s *Service) sendRepositoryNotificationUpdates(ctx context.Context, repo *models.Repository, currentVersion string) error {
+	subs, err := s.subscriptionsRepository.GetUnupdated(ctx, repo.ID, currentVersion)
 	zap.L().Debug("found unupdated subscriptions", zap.Int("subscriptions_count", len(subs)))
 	if err != nil {
 		return err
 	}
-	err = s.sendUpdates(repo, subs)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return s.sendUpdates(ctx, repo, currentVersion, subs)
 }
 
-func (s *Service) sendUpdates(repo *models.Repository, subs []*models.Subscription) error {
-	emails := make([]string, 0, len(subs))
-	for _, sub := range subs {
-		emails = append(emails, sub.Email)
-	}
+// sendUpdates notifies each subscriber synchronously over gRPC and, only on
+// confirmed delivery, advances that subscription's last_seen_tag to
+// currentVersion. A failed delivery leaves the tag unchanged so GetUnupdated
+// returns the subscriber again on the next cron run; failures are isolated so one
+// unreachable recipient does not stop the rest.
+func (s *Service) sendUpdates(
+	ctx context.Context,
+	repo *models.Repository,
+	currentVersion string,
+	subs []*models.Subscription,
+) error {
 	payload := notifications.BuildRepositoryUpdateEmailPayload(s.frontendURL, repo)
 
-	zap.L().Debug(
-		"sending repository update email payload",
-		zap.Any("payload", payload),
-		zap.Any("emails", emails),
-	)
-	err := s.notificationsService.SendEmail(emails, contract.RepositoryUpdated, payload)
-	if err != nil {
-		return err
+	var failed int
+	for _, sub := range subs {
+		if err := s.notificationsService.Notify(ctx, sub.Email, contract.RepositoryUpdated, payload); err != nil {
+			metrics.RepoNotifyTotal.WithLabelValues("error").Inc()
+			zap.L().Error("failed to notify subscriber; leaving last_seen_tag for retry",
+				zap.String("email", sub.Email), zap.Error(err))
+			failed++
+			continue
+		}
+
+		if err := s.subscriptionsRepository.UpdateLastSeenTag(ctx, sub.ID, currentVersion); err != nil {
+			// Delivered, but we could not record it; the subscriber may be emailed
+			// again next run — the notifier dedupes, so no duplicate is sent.
+			metrics.RepoNotifyTotal.WithLabelValues("tag_error").Inc()
+			zap.L().Error("failed to advance last_seen_tag after delivery",
+				zap.Uint("subscription_id", sub.ID), zap.String("email", sub.Email), zap.Error(err))
+			failed++
+			continue
+		}
+
+		metrics.RepoNotifyTotal.WithLabelValues("success").Inc()
+	}
+
+	if failed > 0 {
+		return fmt.Errorf("failed to notify %d of %d subscriber(s)", failed, len(subs))
 	}
 
 	return nil

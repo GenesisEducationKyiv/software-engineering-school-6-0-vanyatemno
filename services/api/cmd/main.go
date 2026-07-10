@@ -18,7 +18,7 @@ import (
 	redisInfra "se-school/internal/infrastructure/redis"
 	"se-school/internal/integrations/github"
 	"se-school/internal/models/factories/codes"
-	"se-school/internal/notifications/publisher"
+	"se-school/internal/notifications/grpcclient"
 	"se-school/internal/notifications/relay"
 	"se-school/internal/notifications/replies"
 	codeRepo "se-school/internal/repositories/code"
@@ -32,6 +32,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	_ "se-school/docs/generated" // swagger docs
 )
@@ -114,8 +116,18 @@ func main() {
 	}
 	kafkaWriter := kafkaInfra.NewWriter(&cfg.Kafka)
 	defer func() { _ = kafkaWriter.Close() }()
-	// Publisher is retained for the cron release-notification path (fire-and-forget).
-	notificationPublisher := publisher.New(ctx, kafkaWriter)
+
+	// Notifier gRPC client: the cron repository-update path calls the notifier
+	// synchronously so a failed delivery leaves the subscription's last_seen_tag
+	// unadvanced (retried next run). The subscribe-confirmation saga still flows
+	// over Kafka (outbox + replies).
+	notifierConn, err := grpc.NewClient(cfg.Notifier.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		zap.L().Fatal("failed to create notifier gRPC client",
+			zap.String("addr", cfg.Notifier.Addr), zap.Error(err))
+	}
+	defer func() { _ = notifierConn.Close() }()
+	notifier := grpcclient.New(notifierConn, cfg.Notifier.Timeout)
 
 	// Services
 	subscriptionService := subscriptionSvc.New(
@@ -134,7 +146,7 @@ func main() {
 		cfg.FrontendURL,
 		repositoryRepository,
 		subscriptionRepository,
-		notificationPublisher,
+		notifier,
 		githubIntegration,
 	)
 

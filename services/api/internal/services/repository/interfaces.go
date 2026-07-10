@@ -39,8 +39,12 @@ type SubscriptionsRepository interface {
 	Delete(ctx context.Context, subscription *models.Subscription) error
 }
 
+// NotificationsService delivers one repository-update alert to one recipient
+// synchronously. A nil return means the notifier confirmed delivery (so the
+// caller may advance the subscription's last_seen_tag); a non-nil return means
+// delivery failed and the tag must be left unchanged for a retry next run.
 type NotificationsService interface {
-	SendEmail(receivers []string, template contract.TemplateName, data any) error
+	Notify(ctx context.Context, recipient string, template contract.TemplateName, data any) error
 }
 
 type GithubIntegration interface {
