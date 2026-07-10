@@ -29,11 +29,18 @@ type Config struct {
 	Redis    Redis    `mapstructure:"REDIS"`
 	Mailer   Mailer   `mapstructure:"MAILER"`
 	Database Database `mapstructure:"DB"`
+	GRPC     GRPC     `mapstructure:"GRPC"`
 	Log      Log      `mapstructure:"LOG"`
 
 	// DedupTTL bounds how long per-recipient idempotency markers live in Redis.
 	// It must comfortably exceed any redelivery/republish window.
 	DedupTTL time.Duration `mapstructure:"DEDUP_TTL" default:"168h"`
+}
+
+// GRPC configures the synchronous delivery server the API calls for
+// repository-update notifications. Port is a net.Listen address, e.g. ":9090".
+type GRPC struct {
+	Port string `mapstructure:"PORT" default:":9090"`
 }
 
 // Kafka configures the consumer. Brokers is a comma-separated list (a single

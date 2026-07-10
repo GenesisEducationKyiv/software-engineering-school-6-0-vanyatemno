@@ -18,4 +18,7 @@ LABEL maintainer="vanya04400@gmail.com"
 COPY --from=builder /out/notifier /app/notifier
 WORKDIR /app
 
+# Synchronous gRPC delivery API the API service calls for repository-update alerts.
+EXPOSE 9090
+
 CMD ["./notifier"]
