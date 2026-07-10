@@ -1,7 +1,6 @@
-// Package logging builds the notifier's structured logger. Logs are emitted as
-// JSON to stdout using Elastic Common Schema (ECS)-friendly field names so the
-// shared Filebeat -> Elasticsearch -> Kibana pipeline can ingest them without
-// extra parsing. Set LOG_ENCODING=console for human-readable local output.
+// Package logging builds the notifier's structured logger: JSON to stdout with
+// Elastic Common Schema field names for the shared Filebeat/Elasticsearch/Kibana
+// pipeline. Set LOG_ENCODING=console for human-readable local output.
 package logging
 
 import (
@@ -16,8 +15,8 @@ import (
 
 const encodingConsole = "console"
 
-// Init builds a *zap.Logger from configuration, decorated with service metadata
-// so every record is attributable to a service/version/environment in Kibana.
+// Init attaches service metadata to every record so logs are attributable to a
+// service/version/environment in Kibana.
 func Init(cfg *config.Log) (*zap.Logger, error) {
 	level, err := zapcore.ParseLevel(cfg.Level)
 	if err != nil {

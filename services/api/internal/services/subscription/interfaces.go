@@ -2,15 +2,10 @@ package subscription
 
 import (
 	"context"
-
-	"ghnotify/contract"
+	"time"
 
 	"se-school/internal/models"
 )
-
-type NotificationsService interface {
-	SendEmail(receivers []string, template contract.TemplateName, data any) error
-}
 
 type GithubIntegration interface {
 	GetRepositoryVersion(ctx context.Context, owner, repositoryName string) (string, error)
@@ -45,4 +40,33 @@ type SubscriptionsRepository interface {
 	UpdateLastSeenTag(ctx context.Context, id uint, tag string) error
 	Save(ctx context.Context, subscription *models.Subscription) error
 	Delete(ctx context.Context, subscription *models.Subscription) error
+}
+
+type SagaRepository interface {
+	Create(ctx context.Context, s *models.SagaInstance) error
+	GetByID(ctx context.Context, id string) (*models.SagaInstance, error)
+	UpdateState(ctx context.Context, id string, state models.SagaState, lastErr string) error
+	GetStuck(ctx context.Context, state models.SagaState, before time.Time, limit int) ([]*models.SagaInstance, error)
+}
+
+// Only Create is exposed here: it participates in the atomic T1 via the
+// UnitOfWork, while the relay drains rows using the concrete repository.
+type OutboxRepository interface {
+	Create(ctx context.Context, m *models.OutboxMessage) error
+}
+
+// TxRepos is the set of repositories bound to a single transaction, handed to
+// the UnitOfWork closure so all of T1's writes commit (or roll back) atomically.
+type TxRepos struct {
+	Subscriptions SubscriptionsRepository
+	Codes         CodesRepository
+	Sagas         SagaRepository
+	Outbox        OutboxRepository
+}
+
+// UnitOfWork generalizes the hand-rolled transaction in
+// repositories/subscription manager.go::Delete so the orchestrator can persist
+// all of T1 atomically.
+type UnitOfWork interface {
+	Do(ctx context.Context, fn func(ctx context.Context, r *TxRepos) error) error
 }

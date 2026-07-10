@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 )
 
 // Suite is the shared harness for an e2e test: browser context, page,
@@ -141,7 +141,7 @@ func connectDB(t *testing.T, ctx context.Context, dsn string) *pgx.Conn {
 
 func truncate(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
-	_, err := conn.Exec(ctx, `TRUNCATE TABLE subscriptions, repositories, codes RESTART IDENTITY CASCADE`)
+	_, err := conn.Exec(ctx, `TRUNCATE TABLE subscriptions, repositories, codes, saga_instances, outbox RESTART IDENTITY CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
 	}

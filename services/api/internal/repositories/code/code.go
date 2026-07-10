@@ -3,6 +3,7 @@ package code
 import (
 	"context"
 	"errors"
+	"se-school/internal/infrastructure/db"
 	"se-school/internal/models"
 
 	"github.com/jackc/pgx/v5"
@@ -10,11 +11,17 @@ import (
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db db.DBTX
 }
 
-func New(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func New(pool *pgxpool.Pool) *Repository {
+	return &Repository{db: pool}
+}
+
+// WithTx returns a copy of the repository bound to tx so its writes join the
+// caller's transaction (used by the saga orchestrator's atomic create).
+func (r *Repository) WithTx(tx pgx.Tx) *Repository {
+	return &Repository{db: tx}
 }
 
 const codeColumns = "id, created_at, updated_at, deleted_at, code, type, expires_at"

@@ -1,6 +1,6 @@
-// Package kafka builds the notifications service's Kafka consumer (reader) and
-// the dead-letter producer. The reader is configured for manual offset commit so
-// the worker acks a message only after it is handled or dead-lettered.
+// Package kafka builds the notifier's Kafka reader and its dead-letter and reply
+// producers. The reader uses manual offset commit, so the worker acks a message
+// only after it is handled or dead-lettered.
 package kafka
 
 import (
@@ -11,8 +11,8 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// NewReader builds a consumer-group reader. CommitInterval 0 disables periodic
-// auto-commit, so the worker controls exactly when offsets advance.
+// CommitInterval 0 disables periodic auto-commit, so the worker controls exactly
+// when offsets advance.
 func NewReader(cfg *config.Kafka) *kafka.Reader {
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        brokers(cfg),
@@ -22,7 +22,6 @@ func NewReader(cfg *config.Kafka) *kafka.Reader {
 	})
 }
 
-// NewDLQWriter builds a producer for the dead-letter topic.
 func NewDLQWriter(cfg *config.Kafka) *kafka.Writer {
 	return &kafka.Writer{
 		Addr:         kafka.TCP(brokers(cfg)...),
@@ -32,7 +31,17 @@ func NewDLQWriter(cfg *config.Kafka) *kafka.Writer {
 	}
 }
 
-// brokers splits the comma-separated broker list into trimmed addresses.
+// Replies are keyed by saga id (Hash balancer) so a saga's replies keep
+// per-partition order.
+func NewReplyWriter(cfg *config.Kafka) *kafka.Writer {
+	return &kafka.Writer{
+		Addr:         kafka.TCP(brokers(cfg)...),
+		Topic:        cfg.RepliesTopic,
+		Balancer:     &kafka.Hash{},
+		RequiredAcks: kafka.RequireAll,
+	}
+}
+
 func brokers(cfg *config.Kafka) []string {
 	parts := strings.Split(cfg.Brokers, ",")
 	for i := range parts {

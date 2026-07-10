@@ -19,12 +19,15 @@ func TestSuite_WiresServiceAndMSW(t *testing.T) {
 		return helpers.JSON(http.StatusOK, map[string]any{"tag_name": "v9.9.9"})
 	})
 
-	err := suite.Svc.Create(suite.Ctx, &dto.CreateSubscriptionRequest{
+	sagaID, err := suite.Svc.Create(suite.Ctx, &dto.CreateSubscriptionRequest{
 		Email: "smoke@example.com",
 		Repo:  "octo/test",
 	})
 	if err != nil {
 		t.Fatalf("expected smoke Create to succeed, got %v", err)
+	}
+	if sagaID == "" {
+		t.Fatal("expected a saga id")
 	}
 
 	sub := suite.FindSubscriptionByEmail(t, "smoke@example.com")
@@ -34,7 +37,7 @@ func TestSuite_WiresServiceAndMSW(t *testing.T) {
 	if suite.GH.CallCount() != 1 {
 		t.Fatalf("expected 1 msw call, got %d", suite.GH.CallCount())
 	}
-	if len(suite.Notifier.SendEmailCalls) != 1 {
-		t.Fatalf("expected 1 confirmation email, got %d", len(suite.Notifier.SendEmailCalls))
+	if got := suite.CountOutbox(t); got != 1 {
+		t.Fatalf("expected 1 outbox command enqueued, got %d", got)
 	}
 }

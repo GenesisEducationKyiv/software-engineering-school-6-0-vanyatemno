@@ -1,5 +1,6 @@
 volumes:
   postgres_data:
+  notifier_postgres_data:
   redis_data:
   kafka_data:
   elasticsearch_data:
@@ -84,6 +85,29 @@ services:
       timeout: 1s
       retries: 20
 
+  # The notifier's OWN Postgres — its durable participant state (deliveries).
+  # A separate database per service (no shared DB) is what makes the Subscribe
+  # flow a genuine two-database distributed transaction coordinated by the saga.
+  notifier-postgres:
+    image: postgres:16.3-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${NOTIFIER_POSTGRES_DB:-gh-notifier}
+    expose:
+      - '5432'
+    volumes:
+      - notifier_postgres_data:/var/lib/postgresql/data
+    networks:
+      github-subscriptions:
+        aliases:
+          - notifier-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${NOTIFIER_POSTGRES_DB:-gh-notifier}"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
   # HTTP API + release-check cron. Publishes notification jobs to Redis.
   api:
     build:
@@ -107,6 +131,7 @@ services:
       REDIS_ADDRESS: "redis:6379"
       REDIS_PASSWORD: ""
       KAFKA_BROKERS: "kafka:9092"
+      KAFKA_REPLIES_TOPIC: "notifications.replies"
       LOG_LEVEL: "info"
       LOG_ENCODING: "json"
       LOG_ENVIRONMENT: "docker"
@@ -133,13 +158,15 @@ services:
       dockerfile: ./services/notifications/Dockerfile
     env_file:
       - ./.env
-    # Talk to the in-network redis regardless of the developer's local .env.
+    # Talk to the in-network redis/postgres regardless of the developer's local .env.
     environment:
+      DB_DSN: "host=notifier-postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${NOTIFIER_POSTGRES_DB:-gh-notifier} port=5432 sslmode=disable"
       REDIS_ADDRESS: "redis:6379"
       REDIS_PASSWORD: ""
       KAFKA_BROKERS: "kafka:9092"
       KAFKA_TOPIC: "notifications.events"
       KAFKA_DLQ_TOPIC: "notifications.events.dlq"
+      KAFKA_REPLIES_TOPIC: "notifications.replies"
       KAFKA_GROUP_ID: "notifications-service"
       KAFKA_MAX_RETRIES: "3"
       DEDUP_TTL: "168h"
@@ -151,6 +178,8 @@ services:
       redis:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      notifier-postgres:
         condition: service_healthy
     labels:
       logging: "app"

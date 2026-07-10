@@ -22,6 +22,8 @@ type SubscriptionsRepositoryMock struct {
 	UpdateLastSeenErr error
 	SaveErr           error
 	DeleteErr         error
+
+	DeleteCount int
 }
 
 func NewSubscriptionsRepositoryMock() *SubscriptionsRepositoryMock {
@@ -57,5 +59,6 @@ func (m *SubscriptionsRepositoryMock) Save(_ context.Context, _ *models.Subscrip
 }
 
 func (m *SubscriptionsRepositoryMock) Delete(_ context.Context, _ *models.Subscription) error {
+	m.DeleteCount++
 	return m.DeleteErr
 }

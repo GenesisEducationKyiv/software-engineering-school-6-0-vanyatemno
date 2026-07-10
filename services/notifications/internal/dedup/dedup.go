@@ -1,7 +1,6 @@
-// Package dedup provides the notifications consumer's idempotency store. Before
-// sending an email to a recipient the worker claims a key here; if the key was
-// already claimed (because the message was redelivered or re-published) the send
-// is skipped, so each email is delivered at most once.
+// Package dedup is the notifications consumer's idempotency store: the worker
+// claims a key per recipient before sending, so each email is delivered at most
+// once across redeliveries/republishes.
 package dedup
 
 import (
@@ -12,7 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Deduper records which (notification, recipient) pairs have already been sent.
 type Deduper interface {
 	// Claim atomically marks key as taken. It returns true if the key was newly
 	// claimed (the caller should send), or false if it was already claimed (the
@@ -23,9 +21,9 @@ type Deduper interface {
 	Release(ctx context.Context, key string) error
 }
 
-// RedisDeduper is a Deduper backed by Redis `SET key value NX EX ttl`. The TTL
-// bounds how long markers live — long enough to cover any redelivery/republish
-// window, short enough to keep Redis from growing unbounded.
+// RedisDeduper backs Deduper with Redis `SET NX EX ttl`. The TTL must be long
+// enough to cover any redelivery/republish window, short enough to keep Redis
+// from growing unbounded.
 type RedisDeduper struct {
 	client *redis.Client
 	ttl    time.Duration

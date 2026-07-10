@@ -1,7 +1,5 @@
-// Package contract defines the wire contract shared between the API service
-// (publisher) and the notifications service (consumer). It contains only pure,
-// JSON-serializable types — no domain models, no template engine, no transport
-// client — so both independently-built modules can agree on the same payloads.
+// Package contract holds the JSON wire types shared by the API (publisher) and
+// notifications (consumer) services.
 package contract
 
 import (
@@ -10,15 +8,12 @@ import (
 	"encoding/json"
 )
 
-// Topic is the Kafka topic notification jobs are published to and consumed from.
 const Topic = "notifications.events"
 
-// DLQTopic is the dead-letter topic the consumer routes messages to when they
-// fail terminally (bad payload, unknown template) or exhaust their retries.
 const DLQTopic = "notifications.events.dlq"
 
-// TemplateName identifies which email template the notifications service should
-// render for a given message.
+const RepliesTopic = "notifications.replies"
+
 type TemplateName = string
 
 const (
@@ -26,26 +21,23 @@ const (
 	RepositoryUpdated TemplateName = "repository_update"
 )
 
-// Message is the envelope published to Channel. Payload carries the
-// template-specific body (one of the *EmailPayload types below) and is decoded
-// by the consumer based on Template.
 type Message struct {
 	Template  TemplateName    `json:"template"`
 	Receivers []string        `json:"receivers"`
 	Payload   json.RawMessage `json:"payload"`
-	// IdempotencyKey deterministically identifies this notification so the
-	// consumer can send each email at most once even if Kafka redelivers the
-	// message or the producer publishes it twice. Set via IdempotencyKey().
+	// IdempotencyKey lets the consumer send each email at most once across
+	// redeliveries. Set via IdempotencyKey().
 	IdempotencyKey string `json:"idempotencyKey"`
+	// SagaID correlates a saga message with its reply on RepliesTopic; empty for
+	// fire-and-forget notifications, which get no reply.
+	SagaID string `json:"sagaId,omitempty"`
 }
 
-// ConfirmEmailPayload is the body for the Confirmation template.
 type ConfirmEmailPayload struct {
 	Code string `json:"code"`
 	Link string `json:"link"`
 }
 
-// RepositoryUpdateEmailPayload is the body for the RepositoryUpdated template.
 type RepositoryUpdateEmailPayload struct {
 	Name           string `json:"name"`
 	Owner          string `json:"owner"`
@@ -53,10 +45,24 @@ type RepositoryUpdateEmailPayload struct {
 	UnsubscribeURL string `json:"unsubscribeUrl"`
 }
 
-// IdempotencyKey derives a deterministic key from a message's template and
-// payload. The same logical notification always maps to the same key, letting
-// the consumer deduplicate redelivered or re-published messages. The payloads
-// above carry no timestamps or nonces, so the hash is stable across publishes.
+type ReplyStatus = string
+
+const (
+	ReplyDispatched ReplyStatus = "dispatched"
+	ReplyFailed     ReplyStatus = "failed"
+)
+
+type Reply struct {
+	SagaID         string      `json:"sagaId"`
+	IdempotencyKey string      `json:"idempotencyKey"`
+	Recipient      string      `json:"recipient"`
+	Status         ReplyStatus `json:"status"`
+	Reason         string      `json:"reason,omitempty"`
+}
+
+// IdempotencyKey derives a stable key from a message's template and payload. The
+// payloads carry no timestamps or nonces, so re-publishing the same notification
+// yields the same key and the consumer can dedupe.
 func IdempotencyKey(template TemplateName, payload json.RawMessage) string {
 	h := sha256.New()
 	h.Write([]byte(template))

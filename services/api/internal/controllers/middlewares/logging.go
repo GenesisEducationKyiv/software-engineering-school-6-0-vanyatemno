@@ -12,9 +12,7 @@ import (
 )
 
 const (
-	// requestIDHeader is the header used to read/propagate the correlation ID.
-	requestIDHeader = "X-Request-ID"
-	// RequestIDContextKey is the Gin context key under which the request ID is stored.
+	requestIDHeader     = "X-Request-ID"
 	RequestIDContextKey = "request_id"
 )
 

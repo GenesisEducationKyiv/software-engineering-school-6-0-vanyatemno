@@ -12,7 +12,7 @@ The app is hosted at AWS: [frontend](http://51.20.10.168:4173/),
 **Core workflow:**
 
 1. A user subscribes by providing their email and a GitHub repository (`owner/repo`).
-2. The system validates the repository via the GitHub API and sends a confirmation email with a unique token.
+2. The system validates the repository via the GitHub API, then runs an **orchestrated saga** that atomically persists the subscription and dispatches the confirmation email across the notifications service (see [Distributed transaction](#distributed-transaction-orchestrated-saga)). `POST /subscribe` returns `202 Accepted` with a saga id the client polls via `GET /subscribe/status/{sagaId}`.
 3. The user confirms the subscription by following the link in the email.
 4. A cron job periodically polls the GitHub API for new releases (responses are cached in Redis to cut API calls and respect rate limits); when a new tag is detected, all confirmed subscribers are notified via email.
 5. Users can unsubscribe at any time using a token included in every notification email.
@@ -51,8 +51,9 @@ graph LR
   of sending it.
 - **Notifications service** (`services/notifications`, Go module `ghnotify/notifier`):
   consumes the topic, renders the HTML template (embedded in the binary) and delivers the email
-  over SMTP. It deduplicates per recipient (Redis) so each email is sent **at most once**, and
-  owns no database.
+  over SMTP. It deduplicates per recipient (Redis) so each email is sent **at most once**. It
+  owns a small PostgreSQL database (`deliveries`) that records each dispatch outcome — its
+  durable participant state in the Subscribe saga (see below).
 - **Contract** (`pkg/contract`, Go module `ghnotify/contract`): the pure, JSON-serializable
   types both sides agree on (topic names, template names, payloads and the idempotency-key helper).
 
@@ -61,6 +62,51 @@ graph LR
 > marker in Redis before sending — so every email goes out **at most once** even on redelivery or
 > re-publish. Messages that fail terminally or exhaust their retries are routed to a dead-letter
 > topic (`notifications.events.dlq`).
+
+### Distributed transaction (orchestrated saga)
+
+The **Subscribe** flow is a distributed transaction across the two services'
+**separate databases**, coordinated by an **orchestrated saga** (no 2PC). Its
+invariant: *a subscription is durable (awaiting the user's confirm click) **iff**
+its confirmation email was dispatched; otherwise it is compensated away.* See
+[ADR-005](services/api/docs/adrs/ADR-005-orchestrated-saga-decision.md).
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as API (orchestrator)
+    participant PgA as Postgres (API)
+    participant K as Kafka
+    participant N as Notifier
+    participant PgN as Postgres (Notifier)
+
+    C->>API: POST /subscribe
+    Note over API,PgA: T1 (one tx): subscription + codes +<br/>saga(AWAITING) + outbox command
+    API-->>C: 202 Accepted { sagaId }
+    API->>K: relay drains outbox → notifications.events
+    K->>N: command (sagaId)
+    Note over N,PgN: delivery SENDING → send SMTP → SENT/FAILED
+    N->>K: reply → notifications.replies
+    K->>API: reply (sagaId, status)
+    alt dispatched
+        API->>PgA: saga → COMPLETED
+    else failed / deadline
+        API->>PgA: compensate: delete subscription+codes → COMPENSATED
+    end
+    C->>API: GET /subscribe/status/{sagaId} → state
+```
+
+- **Transactional outbox.** The confirmation-email command is written in the *same*
+  transaction as the subscription (an `outbox` row), and a background **relay**
+  publishes it — so "state changed" and "command emitted" are atomic (the previous
+  create-then-publish dual-write is gone).
+- **Reply channel.** The notifier reports each dispatch outcome on
+  `notifications.replies`; the API's reply consumer completes or compensates the saga.
+- **Durability.** The `saga_instances` state machine is the source of truth; a
+  **deadline sweeper** compensates sagas whose reply never arrives (notifier down /
+  reply lost), so nothing is stranded. Everything is idempotent (content-derived
+  idempotency key + Redis dedup + the `deliveries` unique constraint), so re-drives
+  and duplicate replies are safe.
 
 **Key technologies:**
 
@@ -126,13 +172,20 @@ cp .env.example .env
 
 > The `LOG_*` variables are documented under [Structured Logging & Log Pipeline → Configuration](#configuration).
 
-**Postgres container (used only by Docker Compose to initialise the database — the app itself connects via `DB_DSN`):**
+> **Saga / messaging:** the API also reads `KAFKA_BROKERS`, `KAFKA_TOPIC`, `KAFKA_DLQ_TOPIC` and
+> `KAFKA_REPLIES_TOPIC` (the saga reply channel), plus optional `SAGA_DEADLINE`,
+> `SAGA_RELAY_INTERVAL` and `SAGA_SWEEP_INTERVAL` (sensible defaults). The **notifications
+> service** now has its **own** `DB_DSN` pointing at a separate database (its `deliveries` store);
+> in Docker Compose this is the `notifier-postgres` container / `NOTIFIER_POSTGRES_DB`.
+
+**Postgres containers (used only by Docker Compose to initialise the databases — the apps connect via their own `DB_DSN`):**
 
 | Variable | Description |
 |---|---|
-| `POSTGRES_USER` | Superuser created when the postgres container first starts |
+| `POSTGRES_USER` | Superuser created when the postgres containers first start |
 | `POSTGRES_PASSWORD` | Superuser password |
-| `POSTGRES_DB` | Database name created on first start |
+| `POSTGRES_DB` | API database name created on first start (`gh-subscriptions`) |
+| `NOTIFIER_POSTGRES_DB` | Notifications-service database name (`gh-notifier`) for the `notifier-postgres` container |
 
 ### Run locally
 
@@ -407,7 +460,7 @@ corresponding stack and drop its volumes.
 .
 ├── pkg/
 │   └── contract/                        # Shared module: ghnotify/contract
-│       ├── contract.go                  # Channel, TemplateName, Message envelope, payloads
+│       ├── contract.go                  # Topics, TemplateName, Message + Reply envelopes, payloads, idempotency key
 │       └── go.mod
 ├── services/
 │   ├── api/                             # API service · Go module se-school
@@ -421,24 +474,29 @@ corresponding stack and drop its volumes.
 │   │   │   ├── integrations/github/     # GitHub API client (go-github)
 │   │   │   ├── metrics/                 # Prometheus RED metric definitions (metrics.go)
 │   │   │   ├── models/                  # Domain models & DTOs
-│   │   │   ├── notifications/           # Publisher + payload builders + test mock
-│   │   │   │   └── publisher/           # Kafka publisher (implements SendEmail)
-│   │   │   ├── repositories/            # Data-access layer (pgx queries)
-│   │   │   ├── services/                # Business logic (subscription, repository)
+│   │   │   ├── notifications/           # Publisher + payload builders + saga transport
+│   │   │   │   ├── publisher/           # Kafka publisher (cron fire-and-forget path)
+│   │   │   │   ├── relay/               # Transactional-outbox relay (drains outbox → Kafka)
+│   │   │   │   └── replies/             # Saga reply consumer (drives the orchestrator)
+│   │   │   ├── repositories/            # Data-access layer (pgx); incl. saga/ + outbox/
+│   │   │   ├── services/                # Business logic (subscription orchestrator, repository)
+│   │   │   ├── uow/                     # Unit of work: atomic multi-repo saga transaction (T1)
 │   │   │   └── utils/                   # Shared helpers (e.g. code generation)
-│   │   ├── tests/integration/           # Integration tests (postgres + redis, mocked notifier)
+│   │   ├── tests/integration/           # Integration tests (postgres + redis; saga replies driven directly)
 │   │   ├── Dockerfile
 │   │   └── go.mod / go.sum
 │   └── notifications/                   # Notifications service · Go module ghnotify/notifier
 │       ├── cmd/main.go                  # Entry-point: consume + render + send
 │       ├── internal/
-│       │   ├── config/                  # Slim config (Kafka, Redis, Mailer, Log)
+│       │   ├── config/                  # Slim config (Kafka, Redis, Mailer, DB, Log)
 │       │   ├── dedup/                   # Idempotency store (Redis SET NX) — at-most-once
-│       │   ├── infrastructure/kafka/    # Consumer (reader) + dead-letter producer
+│       │   ├── infrastructure/db/       # Own Postgres (pgxpool + deliveries migration)
+│       │   ├── infrastructure/kafka/    # Consumer (reader) + DLQ + saga reply producer
 │       │   ├── logging/                 # Structured zap logger
 │       │   ├── mailer/                  # Low-level SMTP sending (gomail)
+│       │   ├── repositories/delivery/   # Delivery records — saga participant state
 │       │   ├── templates/               # HTML templates & rendering (htmls/ embedded)
-│       │   └── worker/                  # Kafka consumer loop (decode → render → send, ack/retry/DLQ)
+│       │   └── worker/                  # Consumer loop (decode → render → send → record → reply, ack/retry/DLQ)
 │       ├── Dockerfile
 │       └── go.mod / go.sum
 ├── tests/e2e/                           # Black-box e2e tests (own module)
@@ -481,7 +539,14 @@ Interactive Swagger UI is available at **`/swagger/index.html`** when the server
 
 ## Future improvements
 
-1. Add a Kafka idempotent producer (or transactional outbox) so duplicate *publishes* are
-   eliminated at the source — the consumer already dedups, this tightens the producer side.
-2. Add tooling to inspect and replay the dead-letter topic (`notifications.events.dlq`).
-3. Wire the unit / integration / e2e suites into CI to run on every push.
+1. ~~Add a transactional outbox so duplicate publishes are eliminated at the source.~~
+   **Done** — the Subscribe flow now uses a transactional outbox + relay and an orchestrated
+   saga (see [Distributed transaction](#distributed-transaction-orchestrated-saga) /
+   [ADR-005](services/api/docs/adrs/ADR-005-orchestrated-saga-decision.md)). Next: extend the
+   same outbox to the cron release-notification path, which still publishes inline.
+2. Consolidate the notifier's two idempotency mechanisms — retire the Redis dedup marker in
+   favour of the `deliveries` unique constraint for saga messages.
+3. Add tooling to inspect and replay the dead-letter topic (`notifications.events.dlq`) and the saga replies.
+4. Move the API's in-order background loops (relay, reply consumer, sweeper) behind a leader
+   election so more than one API instance can run safely.
+5. Wire the unit / integration / e2e suites into CI to run on every push.

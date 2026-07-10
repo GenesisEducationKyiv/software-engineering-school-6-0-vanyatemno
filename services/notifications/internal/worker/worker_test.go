@@ -9,6 +9,7 @@ import (
 
 	"ghnotify/contract"
 	"ghnotify/notifier/internal/mailer"
+	"ghnotify/notifier/internal/repositories/delivery"
 	"ghnotify/notifier/internal/templates"
 
 	"github.com/segmentio/kafka-go"
@@ -54,6 +55,82 @@ type DLQProducerMock struct {
 func (d *DLQProducerMock) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
 	d.writes = append(d.writes, msgs...)
 	return nil
+}
+
+// ReplyProducerMock records every saga reply published.
+type ReplyProducerMock struct {
+	writes []kafka.Message
+}
+
+func (r *ReplyProducerMock) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
+	r.writes = append(r.writes, msgs...)
+	return nil
+}
+
+// DeliveryStoreFake is an in-memory DeliveryStore modelling the deliveries table
+// keyed by (idempotency_key, recipient), with the same ON CONFLICT semantics as
+// the real repository: a repeat Claim returns the existing state unchanged.
+type DeliveryStoreFake struct {
+	byKey    map[string]*delivery.Delivery
+	nextID   int64
+	claimErr error
+}
+
+func NewDeliveryStoreFake() *DeliveryStoreFake {
+	return &DeliveryStoreFake{byKey: map[string]*delivery.Delivery{}}
+}
+
+func deliveryKey(idem, recipient string) string { return idem + "|" + recipient }
+
+func (s *DeliveryStoreFake) Claim(_ context.Context, d *delivery.Delivery) (delivery.State, error) {
+	if s.claimErr != nil {
+		return "", s.claimErr
+	}
+	k := deliveryKey(d.IdempotencyKey, d.Recipient)
+	if existing, ok := s.byKey[k]; ok {
+		d.ID = existing.ID
+		d.State = existing.State
+		return existing.State, nil
+	}
+	s.nextID++
+	rec := &delivery.Delivery{
+		ID:             s.nextID,
+		SagaID:         d.SagaID,
+		IdempotencyKey: d.IdempotencyKey,
+		Recipient:      d.Recipient,
+		Template:       d.Template,
+		State:          delivery.StateSending,
+	}
+	s.byKey[k] = rec
+	d.ID = rec.ID
+	d.State = delivery.StateSending
+	return delivery.StateSending, nil
+}
+
+func (s *DeliveryStoreFake) SetState(_ context.Context, id int64, state delivery.State, lastErr string) error {
+	for _, rec := range s.byKey {
+		if rec.ID == id {
+			rec.State = state
+			rec.LastError = lastErr
+		}
+	}
+	return nil
+}
+
+// seedSent pre-records a delivery in SENT for the given message key + recipient,
+// modelling a prior successful dispatch whose Redis marker has since expired.
+func (s *DeliveryStoreFake) seedSent(idem, recipient string) {
+	s.nextID++
+	s.byKey[deliveryKey(idem, recipient)] = &delivery.Delivery{
+		ID: s.nextID, IdempotencyKey: idem, Recipient: recipient, State: delivery.StateSent,
+	}
+}
+
+func (s *DeliveryStoreFake) stateFor(idem, recipient string) delivery.State {
+	if rec, ok := s.byKey[deliveryKey(idem, recipient)]; ok {
+		return rec.State
+	}
+	return ""
 }
 
 // DeduperFake is an in-memory Deduper modelling Redis SET NX: the first Claim of
@@ -123,14 +200,16 @@ func (m *MailerMock) Send(msg *mailer.Message) error {
 // --- harness ----------------------------------------------------------------
 
 type testDeps struct {
-	worker    *Worker
-	reader    *ReaderMock
-	dlq       *DLQProducerMock
-	dedup     *DeduperFake
-	templates *TemplatesServiceMock
-	mailer    *MailerMock
-	ctx       context.Context
-	cancel    context.CancelFunc
+	worker     *Worker
+	reader     *ReaderMock
+	dlq        *DLQProducerMock
+	replies    *ReplyProducerMock
+	dedup      *DeduperFake
+	deliveries *DeliveryStoreFake
+	templates  *TemplatesServiceMock
+	mailer     *MailerMock
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 func setupTest(msgs []kafka.Message, maxRetries int) *testDeps {
@@ -139,19 +218,23 @@ func setupTest(msgs []kafka.Message, maxRetries int) *testDeps {
 	ctx, cancel := context.WithCancel(context.Background())
 	reader := &ReaderMock{msgs: msgs, cancel: cancel}
 	dlq := &DLQProducerMock{}
+	replies := &ReplyProducerMock{}
 	ded := NewDeduperFake()
+	deliveries := NewDeliveryStoreFake()
 	tmpl := &TemplatesServiceMock{}
 	ml := &MailerMock{}
 
 	return &testDeps{
-		worker:    New(reader, dlq, ded, tmpl, ml, maxRetries),
-		reader:    reader,
-		dlq:       dlq,
-		dedup:     ded,
-		templates: tmpl,
-		mailer:    ml,
-		ctx:       ctx,
-		cancel:    cancel,
+		worker:     New(reader, dlq, replies, ded, deliveries, tmpl, ml, maxRetries),
+		reader:     reader,
+		dlq:        dlq,
+		replies:    replies,
+		dedup:      ded,
+		deliveries: deliveries,
+		templates:  tmpl,
+		mailer:     ml,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -190,6 +273,38 @@ func confirmPayload() contract.ConfirmEmailPayload {
 
 func repoPayload() contract.RepositoryUpdateEmailPayload {
 	return contract.RepositoryUpdateEmailPayload{Name: "repo", Owner: "owner", Version: "v1.2.3", UnsubscribeURL: "https://x/unsub"}
+}
+
+// sagaMessage builds a Confirmation message carrying a SagaID (a saga command)
+// and returns it alongside its idempotency key (for seeding/inspecting the
+// delivery store).
+func sagaMessage(t *testing.T, sagaID, recipient string) (kafka.Message, string) {
+	t.Helper()
+	pb, err := json.Marshal(confirmPayload())
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	key := contract.IdempotencyKey(contract.Confirmation, pb)
+	body, err := json.Marshal(contract.Message{
+		Template:       contract.Confirmation,
+		Receivers:      []string{recipient},
+		Payload:        pb,
+		IdempotencyKey: key,
+		SagaID:         sagaID,
+	})
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
+	return kafka.Message{Key: []byte(key), Value: body}, key
+}
+
+func decodeReply(t *testing.T, m kafka.Message) contract.Reply {
+	t.Helper()
+	var r contract.Reply
+	if err := json.Unmarshal(m.Value, &r); err != nil {
+		t.Fatalf("decode reply: %v", err)
+	}
+	return r
 }
 
 // --- tests ------------------------------------------------------------------
@@ -416,5 +531,108 @@ func TestRun_ContextCancelled_ReturnsWithoutProcessing(t *testing.T) {
 	}
 	if td.reader.commits != 0 {
 		t.Fatalf("commits = %d, want 0", td.reader.commits)
+	}
+}
+
+// --- saga-path tests --------------------------------------------------------
+
+func TestRun_SagaMessage_Success_RecordsSentAndRepliesDispatched(t *testing.T) {
+	msg, key := sagaMessage(t, "s1", "a@x.com")
+	td := setupTest([]kafka.Message{msg}, 3)
+
+	if err := td.worker.Run(td.ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(td.mailer.sent) != 1 {
+		t.Fatalf("sent = %d, want 1", len(td.mailer.sent))
+	}
+	if len(td.dlq.writes) != 0 {
+		t.Fatalf("dlq writes = %d, want 0", len(td.dlq.writes))
+	}
+	if td.reader.commits != 1 {
+		t.Fatalf("commits = %d, want 1", td.reader.commits)
+	}
+	if len(td.replies.writes) != 1 {
+		t.Fatalf("replies = %d, want 1", len(td.replies.writes))
+	}
+	r := decodeReply(t, td.replies.writes[0])
+	if r.SagaID != "s1" || r.Status != contract.ReplyDispatched {
+		t.Fatalf("unexpected reply: %+v", r)
+	}
+	if st := td.deliveries.stateFor(key, "a@x.com"); st != delivery.StateSent {
+		t.Fatalf("delivery state = %q, want SENT", st)
+	}
+}
+
+func TestRun_SagaMessage_TerminalFailure_RepliesFailedAndDeadLetters(t *testing.T) {
+	msg, key := sagaMessage(t, "s2", "a@x.com")
+	td := setupTest([]kafka.Message{msg}, 3)
+	td.templates.renderErr = errors.New("render boom")
+
+	if err := td.worker.Run(td.ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(td.mailer.attempts) != 0 {
+		t.Fatalf("mailer attempts = %d, want 0", len(td.mailer.attempts))
+	}
+	if len(td.dlq.writes) != 1 {
+		t.Fatalf("dlq writes = %d, want 1", len(td.dlq.writes))
+	}
+	if td.reader.commits != 1 {
+		t.Fatalf("commits = %d, want 1", td.reader.commits)
+	}
+	if len(td.replies.writes) != 1 {
+		t.Fatalf("replies = %d, want 1", len(td.replies.writes))
+	}
+	r := decodeReply(t, td.replies.writes[0])
+	if r.SagaID != "s2" || r.Status != contract.ReplyFailed {
+		t.Fatalf("unexpected reply: %+v", r)
+	}
+	if st := td.deliveries.stateFor(key, "a@x.com"); st != delivery.StateFailed {
+		t.Fatalf("delivery state = %q, want FAILED", st)
+	}
+}
+
+func TestRun_SagaMessage_AlreadySent_SkipsSendReAffirmsReply(t *testing.T) {
+	msg, key := sagaMessage(t, "s3", "a@x.com")
+	td := setupTest([]kafka.Message{msg}, 3)
+	td.deliveries.seedSent(key, "a@x.com") // a prior delivery already succeeded durably
+
+	if err := td.worker.Run(td.ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(td.mailer.attempts) != 0 {
+		t.Fatalf("mailer attempts = %d, want 0 (durable dedup must skip the send)", len(td.mailer.attempts))
+	}
+	if len(td.dlq.writes) != 0 {
+		t.Fatalf("dlq writes = %d, want 0", len(td.dlq.writes))
+	}
+	if td.reader.commits != 1 {
+		t.Fatalf("commits = %d, want 1", td.reader.commits)
+	}
+	if len(td.replies.writes) != 1 {
+		t.Fatalf("replies = %d, want 1", len(td.replies.writes))
+	}
+	if r := decodeReply(t, td.replies.writes[0]); r.Status != contract.ReplyDispatched {
+		t.Fatalf("want dispatched, got %q", r.Status)
+	}
+}
+
+func TestRun_NonSagaMessage_EmitsNoReply(t *testing.T) {
+	msg := mustMessage(t, contract.RepositoryUpdated, []string{"a@x.com"}, repoPayload())
+	td := setupTest([]kafka.Message{msg}, 3)
+
+	if err := td.worker.Run(td.ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(td.replies.writes) != 0 {
+		t.Fatalf("expected no reply for a fire-and-forget message, got %d", len(td.replies.writes))
+	}
+	if len(td.mailer.sent) != 1 {
+		t.Fatalf("sent = %d, want 1", len(td.mailer.sent))
 	}
 }

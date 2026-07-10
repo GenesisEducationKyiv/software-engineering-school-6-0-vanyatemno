@@ -1,8 +1,6 @@
-// Package publisher implements the API side of the notifications boundary. It
-// satisfies the NotificationsService interface the domain services depend on,
-// but instead of rendering and sending email in-process it marshals a
-// contract.Message and writes it to the Kafka topic, where the notifications
-// microservice consumes it and delivers the email.
+// Package publisher satisfies NotificationsService by publishing a
+// contract.Message to Kafka instead of sending email in-process; the
+// notifications microservice consumes and delivers it.
 package publisher
 
 import (

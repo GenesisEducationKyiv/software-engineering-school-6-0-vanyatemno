@@ -8,8 +8,6 @@ import (
 	"se-school/internal/models"
 )
 
-// BuildConfirmEmailPayload assembles the confirmation-email payload, including
-// the front-end confirmation link, for publishing to the notifications service.
 func BuildConfirmEmailPayload(frontendURL, code string) contract.ConfirmEmailPayload {
 	return contract.ConfirmEmailPayload{
 		Code: code,
@@ -17,8 +15,6 @@ func BuildConfirmEmailPayload(frontendURL, code string) contract.ConfirmEmailPay
 	}
 }
 
-// BuildRepositoryUpdateEmailPayload assembles the release-notification payload,
-// including the unsubscribe link, for publishing to the notifications service.
 func BuildRepositoryUpdateEmailPayload(
 	frontendURL string,
 	repo *models.Repository,

@@ -1,8 +1,6 @@
 // Package config loads the notifications service configuration from the
-// environment (and an optional .env file). It deliberately reads only the
-// subset of settings the notifier needs — Redis (to subscribe), Mailer (to
-// send) and Log — sharing the same env var names as the API service so a single
-// .env file can drive the whole cluster.
+// environment (and an optional .env file), sharing env var names with the API
+// service so one .env file can drive the whole cluster.
 package config
 
 import (
@@ -25,25 +23,31 @@ const (
 )
 
 type Config struct {
-	Kafka  Kafka  `mapstructure:"KAFKA"`
-	Redis  Redis  `mapstructure:"REDIS"`
-	Mailer Mailer `mapstructure:"MAILER"`
-	Log    Log    `mapstructure:"LOG"`
+	Kafka    Kafka    `mapstructure:"KAFKA"`
+	Redis    Redis    `mapstructure:"REDIS"`
+	Mailer   Mailer   `mapstructure:"MAILER"`
+	Database Database `mapstructure:"DB"`
+	Log      Log      `mapstructure:"LOG"`
 
 	// DedupTTL bounds how long per-recipient idempotency markers live in Redis.
 	// It must comfortably exceed any redelivery/republish window.
 	DedupTTL time.Duration `mapstructure:"DEDUP_TTL" default:"168h"`
 }
 
-// Kafka configures the consumer. Brokers is a comma-separated list (a single
-// address is the common case); GroupID is the consumer group; MaxRetries bounds
-// transient-failure retries before a message is dead-lettered.
+// Kafka configures the consumer. Brokers is a comma-separated list; MaxRetries
+// bounds transient-failure retries before a message is dead-lettered.
 type Kafka struct {
-	Brokers    string `mapstructure:"BROKERS" default:"localhost:9092"`
-	Topic      string `mapstructure:"TOPIC" default:"notifications.events"`
-	DLQTopic   string `mapstructure:"DLQ_TOPIC" default:"notifications.events.dlq"`
-	GroupID    string `mapstructure:"GROUP_ID" default:"notifications-service"`
-	MaxRetries int    `mapstructure:"MAX_RETRIES" default:"3"`
+	Brokers      string `mapstructure:"BROKERS" default:"localhost:9092"`
+	Topic        string `mapstructure:"TOPIC" default:"notifications.events"`
+	DLQTopic     string `mapstructure:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	RepliesTopic string `mapstructure:"REPLIES_TOPIC" default:"notifications.replies"`
+	GroupID      string `mapstructure:"GROUP_ID" default:"notifications-service"`
+	MaxRetries   int    `mapstructure:"MAX_RETRIES" default:"3"`
+}
+
+// DSN is empty by default so a misconfiguration fails fast at startup.
+type Database struct {
+	DSN string `mapstructure:"DSN" default:""`
 }
 
 type Redis struct {
@@ -98,7 +102,6 @@ func read(config any, opts ...viper.DecoderConfigOption) error {
 	return nil
 }
 
-// setDefaults sets default values for struct fields based on the `default` tag.
 func setDefaults(parentName string, vip *viper.Viper, t reflect.StructField, v reflect.Value) error {
 	if v.Kind() == reflect.Struct {
 		value, ok := t.Tag.Lookup(mapStructureTagName)

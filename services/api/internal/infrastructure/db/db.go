@@ -24,9 +24,8 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Connect opens a pgxpool to the configured Postgres instance, runs any
-// pending migrations embedded under migrations/, and returns the pool.
-// Callers own the pool and must Close it when shutting down.
+// Connect also runs pending migrations. Callers own the returned pool and must
+// Close it on shutdown.
 func Connect(cfg *config.Database) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DNS)
 	if err != nil {
@@ -86,9 +85,8 @@ func runMigrations(poolCfg *pgxpool.Config) error {
 	return nil
 }
 
-// toMigrateURL renders the already-parsed pgx connection details as a pgx5://
-// URL for the golang-migrate pgx/v5 driver. This works regardless of whether
-// the original DSN was URL-form (postgres://…) or keyword-form (host=… user=…).
+// toMigrateURL works regardless of whether the DSN was URL-form (postgres://…)
+// or keyword-form (host=… user=…).
 func toMigrateURL(cfg *pgxpool.Config) string {
 	cc := cfg.ConnConfig
 	u := &url.URL{

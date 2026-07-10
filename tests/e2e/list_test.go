@@ -5,7 +5,7 @@ import (
 
 	"se-school/tests/e2e/helpers"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 )
 
 // TestList_ShowsConfirmedSubscription: after subscribe+confirm, the

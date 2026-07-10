@@ -20,7 +20,6 @@ type Scheduler struct {
 	repositoryService RepositoriesService
 }
 
-// New creates a new Scheduler and registers all cron jobs based on the provided config.
 func New(appCtx context.Context, cfg *config.Cron, repositoryService RepositoriesService) *Scheduler {
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(zap.NewStdLog(zap.L()))))
 
@@ -35,7 +34,6 @@ func New(appCtx context.Context, cfg *config.Cron, repositoryService Repositorie
 	return s
 }
 
-// registerJobs adds all scheduled jobs to the cron scheduler.
 func (s *Scheduler) registerJobs(cfg *config.Cron) {
 	_, err := s.cron.AddFunc(cfg.RepoCheckSchedule, s.checkAllReposTagAndAlert)
 	if err != nil {
@@ -45,7 +43,6 @@ func (s *Scheduler) registerJobs(cfg *config.Cron) {
 	zap.L().Info("cron job registered", zap.String("schedule", cfg.RepoCheckSchedule), zap.String("job", "checkAllReposTagAndAlert"))
 }
 
-// checkAllReposTagAndAlert is the cron handler that invokes the repository service.
 func (s *Scheduler) checkAllReposTagAndAlert() {
 	zap.L().Info("cron: starting CheckAllReposTagAndAlert")
 
@@ -63,7 +60,6 @@ func (s *Scheduler) checkAllReposTagAndAlert() {
 	zap.L().Info("cron: CheckAllReposTagAndAlert completed successfully")
 }
 
-// Start begins executing all registered cron jobs.
 func (s *Scheduler) Start() {
 	zap.L().Info("starting cron scheduler")
 	s.cron.Start()

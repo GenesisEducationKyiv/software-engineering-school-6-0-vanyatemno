@@ -19,6 +19,23 @@ services:
       timeout: 1s
       retries: 30
 
+  # The notifier's own database for e2e (deliveries table / saga participant).
+  notifier-postgres-e2e:
+    image: postgres:16.3-alpine
+    environment:
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e
+      POSTGRES_DB: notifier
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - github-subscriptions-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e -d notifier"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
   redis-e2e:
     image: redis:7-alpine
     tmpfs:
@@ -76,6 +93,7 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
       KAFKA_BROKERS: "kafka-e2e:9092"
+      KAFKA_REPLIES_TOPIC: "notifications.replies"
       # Disable the release-check cron during e2e by scheduling it for
       # a date that won't fire during the run.
       CRON_REPO_CHECK_SCHEDULE: "0 0 1 1 *"
@@ -103,15 +121,19 @@ services:
       MAILER_FROM: "noreply@e2e.local"
       MAILER_SMTP: "mailpit"
       MAILER_PASSWORD: ""
+      DB_DSN: "host=notifier-postgres-e2e user=e2e password=e2e dbname=notifier port=5432 sslmode=disable"
       REDIS_ADDRESS: "redis-e2e:6379"
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
       KAFKA_BROKERS: "kafka-e2e:9092"
+      KAFKA_REPLIES_TOPIC: "notifications.replies"
       LOG_ENCODING: "console"
     depends_on:
       redis-e2e:
         condition: service_healthy
       kafka-e2e:
+        condition: service_healthy
+      notifier-postgres-e2e:
         condition: service_healthy
       mailpit:
         condition: service_started

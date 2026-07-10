@@ -1,5 +1,12 @@
 basePath: /api
 definitions:
+  dto.CreateSubscriptionResponse:
+    properties:
+      sagaId:
+        type: string
+      state:
+        type: string
+    type: object
   dto.SubscriptionResponse:
     properties:
       confirmed:
@@ -9,6 +16,13 @@ definitions:
       last_seen_tag:
         type: string
       repo:
+        type: string
+    type: object
+  dto.SubscriptionStatusResponse:
+    properties:
+      sagaId:
+        type: string
+      state:
         type: string
     type: object
 info:
@@ -62,8 +76,8 @@ paths:
       consumes:
       - application/json
       - application/x-www-form-urlencoded
-      description: Subscribe an email to receive notifications about new releases
-        of a GitHub repository. The repository is validated via GitHub API.
+      description: Starts the confirmation saga for an email + GitHub repository.
+        Returns 202 with a saga id to poll for completion.
       parameters:
       - description: Email address to subscribe
         in: formData
@@ -78,13 +92,10 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: Subscription successful. Confirmation email sent.
+        "202":
+          description: Subscription accepted; poll status by saga id
           schema:
-            properties:
-              message:
-                type: string
-            type: object
+            $ref: '#/definitions/dto.CreateSubscriptionResponse'
         "400":
           description: Invalid input (e.g., invalid repo format)
           schema:
@@ -109,6 +120,42 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Subscribe to release notifications
+      tags:
+      - subscription
+  /subscribe/status/{sagaId}:
+    get:
+      description: Returns the current state of a subscribe saga started via POST
+        /subscribe.
+      parameters:
+      - description: Saga id returned by POST /subscribe
+        in: path
+        name: sagaId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Current saga state
+          schema:
+            $ref: '#/definitions/dto.SubscriptionStatusResponse'
+        "400":
+          description: Invalid saga id
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "404":
+          description: Saga not found
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get subscribe saga status
       tags:
       - subscription
   /subscriptions:

@@ -119,6 +119,37 @@ func (s *Suite) FindSubscriptionByEmail(t *testing.T, email string) *models.Subs
 	return subs[0]
 }
 
+// CountOutbox returns the total number of outbox rows.
+func (s *Suite) CountOutbox(t *testing.T) int64 {
+	t.Helper()
+	var n int64
+	if err := s.DB.QueryRow(s.Ctx, "SELECT count(*) FROM outbox").Scan(&n); err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	return n
+}
+
+// CountSagas returns the total number of saga_instances rows.
+func (s *Suite) CountSagas(t *testing.T) int64 {
+	t.Helper()
+	var n int64
+	if err := s.DB.QueryRow(s.Ctx, "SELECT count(*) FROM saga_instances").Scan(&n); err != nil {
+		t.Fatalf("count sagas: %v", err)
+	}
+	return n
+}
+
+func (s *Suite) SagaState(t *testing.T, id string) string {
+	t.Helper()
+	var state string
+	if err := s.DB.QueryRow(s.Ctx,
+		"SELECT state FROM saga_instances WHERE id = $1", id,
+	).Scan(&state); err != nil {
+		t.Fatalf("saga state %s: %v", id, err)
+	}
+	return state
+}
+
 // CodeExists reports whether a non-soft-deleted code row with the given id exists.
 func (s *Suite) CodeExists(t *testing.T, id uint) bool {
 	t.Helper()

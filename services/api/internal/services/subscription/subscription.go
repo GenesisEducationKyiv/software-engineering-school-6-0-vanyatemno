@@ -1,5 +1,7 @@
 package subscription
 
+import "time"
+
 type Service struct {
 	frontendURL             string
 	subscriptionsRepository SubscriptionsRepository
@@ -7,7 +9,9 @@ type Service struct {
 	codesRepository         CodesRepository
 	codeFactory             CodeFactory
 	githubIntegration       GithubIntegration
-	notificationService     NotificationsService
+	uow                     UnitOfWork
+	sagaRepository          SagaRepository
+	sagaDeadline            time.Duration
 }
 
 func New(
@@ -17,7 +21,9 @@ func New(
 	codesRepository CodesRepository,
 	codeFactory CodeFactory,
 	githubIntegration GithubIntegration,
-	notificationService NotificationsService,
+	uow UnitOfWork,
+	sagaRepository SagaRepository,
+	sagaDeadline time.Duration,
 ) *Service {
 	return &Service{
 		frontendURL:             frontendURL,
@@ -26,6 +32,8 @@ func New(
 		codesRepository:         codesRepository,
 		codeFactory:             codeFactory,
 		githubIntegration:       githubIntegration,
-		notificationService:     notificationService,
+		uow:                     uow,
+		sagaRepository:          sagaRepository,
+		sagaDeadline:            sagaDeadline,
 	}
 }

@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 type Config struct {
 	Database    Database    `mapstructure:"DB" json:"DB" yaml:"DB"`
 	Redis       Redis       `mapstructure:"REDIS" json:"REDIS" yaml:"REDIS"`
@@ -8,21 +10,31 @@ type Config struct {
 	Cron        Cron        `mapstructure:"CRON" json:"CRON" yaml:"CRON"`
 	Log         Log         `mapstructure:"LOG" json:"LOG" yaml:"LOG"`
 	Kafka       Kafka       `mapstructure:"KAFKA" json:"KAFKA" yaml:"KAFKA"`
+	Saga        Saga        `mapstructure:"SAGA" json:"SAGA" yaml:"SAGA"`
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
 }
 
-// Kafka configures the producer that publishes notification jobs. Brokers is a
-// comma-separated list (a single address is the common case); Topic and
-// DLQTopic default to the canonical names in ghnotify/contract.
+// Brokers is a comma-separated list; the topic names default to the
+// ghnotify/contract values.
 type Kafka struct {
-	Brokers  string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
-	Topic    string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
-	DLQTopic string `mapstructure:"DLQ_TOPIC" json:"DLQ_TOPIC" yaml:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	Brokers      string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
+	Topic        string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
+	DLQTopic     string `mapstructure:"DLQ_TOPIC" json:"DLQ_TOPIC" yaml:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	RepliesTopic string `mapstructure:"REPLIES_TOPIC" json:"REPLIES_TOPIC" yaml:"REPLIES_TOPIC" default:"notifications.replies"`
+	SagaGroupID  string `mapstructure:"SAGA_GROUP_ID" json:"SAGA_GROUP_ID" yaml:"SAGA_GROUP_ID" default:"saga-orchestrator"`
 }
 
-// Log configures structured application logging. The defaults emit JSON to
-// stdout, which is what the Filebeat -> Elasticsearch -> Kibana pipeline
-// consumes. Set ENCODING=console for human-readable local development.
+// Deadline bounds how long a saga may await the notifier's reply before the
+// sweeper compensates it.
+type Saga struct {
+	Deadline      time.Duration `mapstructure:"DEADLINE" json:"DEADLINE" yaml:"DEADLINE" default:"2m"`
+	RelayInterval time.Duration `mapstructure:"RELAY_INTERVAL" json:"RELAY_INTERVAL" yaml:"RELAY_INTERVAL" default:"1s"`
+	SweepInterval time.Duration `mapstructure:"SWEEP_INTERVAL" json:"SWEEP_INTERVAL" yaml:"SWEEP_INTERVAL" default:"30s"`
+	BatchSize     int           `mapstructure:"BATCH_SIZE" json:"BATCH_SIZE" yaml:"BATCH_SIZE" default:"100"`
+}
+
+// Defaults emit JSON to stdout for the Filebeat → Elasticsearch → Kibana
+// pipeline; set ENCODING=console for human-readable local development.
 type Log struct {
 	Level       string `mapstructure:"LEVEL" json:"LEVEL" yaml:"LEVEL" default:"info"`
 	Encoding    string `mapstructure:"ENCODING" json:"ENCODING" yaml:"ENCODING" default:"json"`
