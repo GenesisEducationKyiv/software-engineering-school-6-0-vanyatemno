@@ -6,7 +6,7 @@ import (
 
 	"se-school/tests/e2e/helpers"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 )
 
 func TestSubscribe_ValidRepo_CreatesUnconfirmedSubscription(t *testing.T) {

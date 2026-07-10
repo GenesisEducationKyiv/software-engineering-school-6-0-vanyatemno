@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 )
 
 // SubscribeViaUI fills the Home page form and submits. Returns once the

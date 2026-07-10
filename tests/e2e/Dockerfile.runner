@@ -7,7 +7,7 @@ RUN go mod download
 
 # Install Playwright driver + browsers + OS deps that match the
 # playwright-go version pinned in go.mod.
-RUN go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium
+RUN go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium
 
 COPY tests/e2e/ ./
 
