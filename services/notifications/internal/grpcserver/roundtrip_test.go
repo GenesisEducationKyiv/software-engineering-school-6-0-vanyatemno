@@ -17,7 +17,8 @@ import (
 // registered server, which decodes it and invokes the Sender. It guards against
 // registration / proto-wiring mistakes the in-process handler tests can't catch.
 func TestNotify_RealTransport_RoundTrip(t *testing.T) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	lis, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}

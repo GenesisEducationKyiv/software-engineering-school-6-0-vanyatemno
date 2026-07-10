@@ -175,7 +175,7 @@ func (d *Dispatcher) deliver(ctx context.Context, cmd Command) error {
 	}
 	if !claimed {
 		// Already sent to this recipient (redelivery / concurrent attempt).
-		zap.L().Info("skipping already-sent email", zap.String("recipient", cmd.Recipient))
+		zap.L().Debug("skipping already-sent email", zap.String("recipient", cmd.Recipient))
 		return nil
 	}
 
@@ -192,8 +192,6 @@ func (d *Dispatcher) deliver(ctx context.Context, cmd Command) error {
 		return Retryable(fmt.Errorf("send email: %w", err))
 	}
 
-	zap.L().Info("notification sent",
-		zap.String("template", cmd.Template), zap.String("recipient", cmd.Recipient))
 	return nil
 }
 

@@ -234,7 +234,7 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 			continue
 		}
 		if !claimed {
-			zap.L().Info("skipping already-sent email", zap.String("recipient", recipient))
+			zap.L().Debug("skipping already-sent email", zap.String("recipient", recipient))
 			continue
 		}
 
@@ -259,9 +259,6 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 		return dispatch.Retryable(fmt.Errorf("failed to send to %d recipient(s)", failed))
 	}
 
-	zap.L().Info("notification sent",
-		zap.String("template", m.Template),
-		zap.Int("receivers", len(m.Receivers)))
 	return nil
 }
 
