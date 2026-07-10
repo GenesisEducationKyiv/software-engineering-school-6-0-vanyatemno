@@ -1,13 +1,24 @@
 package subscription
 
-import "github.com/jackc/pgx/v5/pgxpool"
+import (
+	"se-school/internal/infrastructure/db"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
 
 type Repository struct {
-	db *pgxpool.Pool
+	db db.DBTX
 }
 
-func New(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func New(pool *pgxpool.Pool) *Repository {
+	return &Repository{db: pool}
+}
+
+// WithTx returns a copy of the repository bound to tx so its writes join the
+// caller's transaction (used by the saga orchestrator's atomic create).
+func (r *Repository) WithTx(tx pgx.Tx) *Repository {
+	return &Repository{db: tx}
 }
 
 const subscriptionColumns = `
