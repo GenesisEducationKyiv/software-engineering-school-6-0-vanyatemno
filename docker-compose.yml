@@ -108,7 +108,8 @@ services:
       timeout: 1s
       retries: 20
 
-  # HTTP API + release-check cron. Publishes notification jobs to Redis.
+  # HTTP API + release-check cron. Sends subscribe-confirmation emails via Kafka
+  # (the saga), and repository-update alerts synchronously via the notifier's gRPC API.
   api:
     build:
       context: ./
@@ -132,6 +133,8 @@ services:
       REDIS_PASSWORD: ""
       KAFKA_BROKERS: "kafka:9092"
       KAFKA_REPLIES_TOPIC: "notifications.replies"
+      # Synchronous repository-update alerts: the notifier's gRPC address.
+      NOTIFIER_ADDR: "notifier:9090"
       LOG_LEVEL: "info"
       LOG_ENCODING: "json"
       LOG_ENVIRONMENT: "docker"
@@ -143,6 +146,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      notifier:
+        condition: service_started
     labels:
       logging: "app"
     networks:
@@ -151,11 +156,15 @@ services:
           - api
           - backend
 
-  # Notifications microservice. Subscribes to the Redis channel and sends email.
+  # Notifications microservice. Consumes Kafka saga commands (confirmation emails)
+  # and serves a synchronous gRPC delivery API (repository-update alerts); sends
+  # email over SMTP.
   notifier:
     build:
       context: ./
       dockerfile: ./services/notifications/Dockerfile
+    expose:
+      - '9090'
     env_file:
       - ./.env
     # Talk to the in-network redis/postgres regardless of the developer's local .env.
@@ -170,6 +179,8 @@ services:
       KAFKA_GROUP_ID: "notifications-service"
       KAFKA_MAX_RETRIES: "3"
       DEDUP_TTL: "168h"
+      # Synchronous delivery API the API service calls for repository-update alerts.
+      GRPC_PORT: ":9090"
       LOG_LEVEL: "info"
       LOG_ENCODING: "json"
       LOG_ENVIRONMENT: "docker"
