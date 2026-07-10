@@ -32,6 +32,7 @@ func RegisterRoutes(r *gin.Engine, sc *SubscriptionController, cfg *config.Appli
 		api.GET("/confirm/:token", sc.Confirm)
 		api.GET("/unsubscribe/:token", sc.Unsubscribe)
 		api.POST("/subscribe", sc.Subscribe)
+		api.GET("/subscribe/status/:sagaId", sc.Status)
 		api.GET("/subscriptions", sc.GetSubscriptions)
 	}
 }

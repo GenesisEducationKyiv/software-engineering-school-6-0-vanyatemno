@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 type Config struct {
 	Database    Database    `mapstructure:"DB" json:"DB" yaml:"DB"`
 	Redis       Redis       `mapstructure:"REDIS" json:"REDIS" yaml:"REDIS"`
@@ -8,16 +10,30 @@ type Config struct {
 	Cron        Cron        `mapstructure:"CRON" json:"CRON" yaml:"CRON"`
 	Log         Log         `mapstructure:"LOG" json:"LOG" yaml:"LOG"`
 	Kafka       Kafka       `mapstructure:"KAFKA" json:"KAFKA" yaml:"KAFKA"`
+	Saga        Saga        `mapstructure:"SAGA" json:"SAGA" yaml:"SAGA"`
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
 }
 
-// Kafka configures the producer that publishes notification jobs. Brokers is a
-// comma-separated list (a single address is the common case); Topic and
-// DLQTopic default to the canonical names in ghnotify/contract.
+// Kafka configures the producer that publishes notification jobs and the
+// consumer that reads saga replies. Brokers is a comma-separated list (a single
+// address is the common case); Topic, DLQTopic and RepliesTopic default to the
+// canonical names in ghnotify/contract.
 type Kafka struct {
-	Brokers  string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
-	Topic    string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
-	DLQTopic string `mapstructure:"DLQ_TOPIC" json:"DLQ_TOPIC" yaml:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	Brokers      string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
+	Topic        string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
+	DLQTopic     string `mapstructure:"DLQ_TOPIC" json:"DLQ_TOPIC" yaml:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	RepliesTopic string `mapstructure:"REPLIES_TOPIC" json:"REPLIES_TOPIC" yaml:"REPLIES_TOPIC" default:"notifications.replies"`
+	SagaGroupID  string `mapstructure:"SAGA_GROUP_ID" json:"SAGA_GROUP_ID" yaml:"SAGA_GROUP_ID" default:"saga-orchestrator"`
+}
+
+// Saga tunes the orchestrator's background loops. Deadline bounds how long a
+// saga may await the notifier's reply before the sweeper compensates it;
+// RelayInterval/SweepInterval pace the outbox relay and the stuck-saga sweeper.
+type Saga struct {
+	Deadline      time.Duration `mapstructure:"DEADLINE" json:"DEADLINE" yaml:"DEADLINE" default:"2m"`
+	RelayInterval time.Duration `mapstructure:"RELAY_INTERVAL" json:"RELAY_INTERVAL" yaml:"RELAY_INTERVAL" default:"1s"`
+	SweepInterval time.Duration `mapstructure:"SWEEP_INTERVAL" json:"SWEEP_INTERVAL" yaml:"SWEEP_INTERVAL" default:"30s"`
+	BatchSize     int           `mapstructure:"BATCH_SIZE" json:"BATCH_SIZE" yaml:"BATCH_SIZE" default:"100"`
 }
 
 // Log configures structured application logging. The defaults emit JSON to

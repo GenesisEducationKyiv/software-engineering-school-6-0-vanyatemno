@@ -22,6 +22,10 @@ type SubscriptionsRepositoryMock struct {
 	UpdateLastSeenErr error
 	SaveErr           error
 	DeleteErr         error
+
+	// DeleteCount records how many times Delete was called (e.g. for asserting
+	// saga compensation).
+	DeleteCount int
 }
 
 func NewSubscriptionsRepositoryMock() *SubscriptionsRepositoryMock {
@@ -57,5 +61,6 @@ func (m *SubscriptionsRepositoryMock) Save(_ context.Context, _ *models.Subscrip
 }
 
 func (m *SubscriptionsRepositoryMock) Delete(_ context.Context, _ *models.Subscription) error {
+	m.DeleteCount++
 	return m.DeleteErr
 }

@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"se-school/internal/infrastructure/logging"
+	"se-school/internal/models"
 	"se-school/internal/models/dto"
 
 	"github.com/gin-gonic/gin"
@@ -25,15 +26,21 @@ func NewSubscriptionController(
 // Subscribe handles POST /api/subscribe.
 // Accepts form-data or JSON with "email" and "repo" fields.
 //
+// Subscribing starts an orchestrated saga (create subscription + dispatch the
+// confirmation email across the notifications service). The endpoint returns
+// 202 Accepted with a saga id; the caller polls GET /subscribe/status/{sagaId}
+// to learn whether the confirmation email was dispatched (COMPLETED) or the
+// subscription was rolled back (COMPENSATED).
+//
 //	@Summary		Subscribe to release notifications
-//	@Description	Subscribe an email to receive notifications about new releases of a GitHub repository. The repository is validated via GitHub API.
+//	@Description	Starts the confirmation saga for an email + GitHub repository. Returns 202 with a saga id to poll for completion.
 //	@Tags			subscription
 //	@Accept			json
 //	@Accept			x-www-form-urlencoded
 //	@Produce		json
 //	@Param			email	formData	string	true	"Email address to subscribe"
 //	@Param			repo	formData	string	true	"GitHub repository in owner/repo format (e.g., golang/go)"
-//	@Success		200		{object}	object{message=string}	"Subscription successful. Confirmation email sent."
+//	@Success		202		{object}	dto.CreateSubscriptionResponse	"Subscription accepted; poll status by saga id"
 //	@Failure		400		{object}	object{error=string}	"Invalid input (e.g., invalid repo format)"
 //	@Failure		404		{object}	object{error=string}	"Repository not found on GitHub"
 //	@Failure		409		{object}	object{error=string}	"Email already subscribed to this repository"
@@ -48,13 +55,48 @@ func (sc *SubscriptionController) Subscribe(c *gin.Context) {
 		return
 	}
 
-	err = sc.subscriptionService.Create(c.Request.Context(), &req)
+	sagaID, err := sc.subscriptionService.Create(c.Request.Context(), &req)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Subscription successful. Confirmation email sent."})
+	c.JSON(http.StatusAccepted, dto.CreateSubscriptionResponse{
+		SagaID: sagaID,
+		State:  models.SagaStateAwaitingNotification,
+	})
+}
+
+// Status handles GET /api/subscribe/status/:sagaId.
+//
+//	@Summary		Get subscribe saga status
+//	@Description	Returns the current state of a subscribe saga started via POST /subscribe.
+//	@Tags			subscription
+//	@Produce		json
+//	@Param			sagaId	path		string	true	"Saga id returned by POST /subscribe"
+//	@Success		200		{object}	dto.SubscriptionStatusResponse	"Current saga state"
+//	@Failure		400		{object}	object{error=string}	"Invalid saga id"
+//	@Failure		404		{object}	object{error=string}	"Saga not found"
+//	@Security		ApiKeyAuth
+//	@Router			/subscribe/status/{sagaId} [get]
+func (sc *SubscriptionController) Status(c *gin.Context) {
+	var req dto.SubscriptionStatusRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		logging.FromContext(c.Request.Context()).Warn("invalid status request", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid saga id"})
+		return
+	}
+
+	saga, err := sc.subscriptionService.Status(c.Request.Context(), req.SagaID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.SubscriptionStatusResponse{
+		SagaID: saga.ID,
+		State:  saga.State,
+	})
 }
 
 // Confirm handles GET /api/confirm/:token.

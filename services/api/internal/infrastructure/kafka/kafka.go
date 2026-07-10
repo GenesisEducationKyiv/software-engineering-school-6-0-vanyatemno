@@ -53,11 +53,24 @@ func EnsureTopics(ctx context.Context, cfg *config.Kafka) error {
 	err = ctrlConn.CreateTopics(
 		kafka.TopicConfig{Topic: cfg.Topic, NumPartitions: 1, ReplicationFactor: 1},
 		kafka.TopicConfig{Topic: cfg.DLQTopic, NumPartitions: 1, ReplicationFactor: 1},
+		kafka.TopicConfig{Topic: cfg.RepliesTopic, NumPartitions: 1, ReplicationFactor: 1},
 	)
 	if err != nil && !errors.Is(err, kafka.TopicAlreadyExists) {
 		return err
 	}
 	return nil
+}
+
+// NewReplyReader builds a consumer-group reader for the saga replies topic.
+// CommitInterval 0 disables periodic auto-commit so the reply consumer acks a
+// reply only after the orchestrator has handled it.
+func NewReplyReader(cfg *config.Kafka) *kafka.Reader {
+	return kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        brokers(cfg),
+		GroupID:        cfg.SagaGroupID,
+		Topic:          cfg.RepliesTopic,
+		CommitInterval: 0,
+	})
 }
 
 // brokers splits the comma-separated broker list into trimmed addresses.

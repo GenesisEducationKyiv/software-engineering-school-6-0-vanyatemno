@@ -10,11 +10,13 @@ import (
 	dbinfra "se-school/internal/infrastructure/db"
 	"se-school/internal/integrations/github"
 	codesFactory "se-school/internal/models/factories/codes"
-	"se-school/internal/notifications"
 	codeRepo "se-school/internal/repositories/code"
+	outboxRepo "se-school/internal/repositories/outbox"
 	repoRepo "se-school/internal/repositories/repository"
+	sagaRepo "se-school/internal/repositories/saga"
 	subRepo "se-school/internal/repositories/subscription"
 	"se-school/internal/services/subscription"
+	"se-school/internal/uow"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,17 +26,18 @@ type Suite struct {
 	T   *testing.T
 	Ctx context.Context
 
-	Cfg      *config.Config
-	DB       *pgxpool.Pool
-	Redis    *redis.Client
-	GH       *MSWServer
-	Notifier *notifications.NotificationsServiceMock
+	Cfg   *config.Config
+	DB    *pgxpool.Pool
+	Redis *redis.Client
+	GH    *MSWServer
 
-	Svc      *subscription.Service
-	SubRepo  *subRepo.Repository
-	RepoRepo *repoRepo.Repository
-	CodeRepo *codeRepo.Repository
-	Factory  *codesFactory.Factory
+	Svc        *subscription.Service
+	SubRepo    *subRepo.Repository
+	RepoRepo   *repoRepo.Repository
+	CodeRepo   *codeRepo.Repository
+	SagaRepo   *sagaRepo.Repository
+	OutboxRepo *outboxRepo.Repository
+	Factory    *codesFactory.Factory
 }
 
 // NewSuite spins up a fully wired subscription service backed by real
@@ -67,7 +70,6 @@ func NewSuite(t *testing.T) *Suite {
 		},
 	}
 
-	notifier := notifications.NewNotificationsServiceMock()
 	githubSvc, err := github.New(&cfg.Github, rdb)
 	if err != nil {
 		t.Fatalf("github integration: %v", err)
@@ -77,6 +79,11 @@ func NewSuite(t *testing.T) *Suite {
 	subscriptionsRepo := subRepo.New(pool)
 	repositoriesRepo := repoRepo.New(pool)
 	codesRepo := codeRepo.New(pool)
+	sagasRepo := sagaRepo.New(pool)
+	outboxRepository := outboxRepo.New(pool)
+
+	transactor := dbinfra.NewTransactor(pool)
+	unitOfWork := uow.New(transactor, subscriptionsRepo, codesRepo, sagasRepo, outboxRepository)
 
 	svc := subscription.New(
 		cfg.FrontendURL,
@@ -85,22 +92,25 @@ func NewSuite(t *testing.T) *Suite {
 		codesRepo,
 		factory,
 		githubSvc,
-		notifier,
+		unitOfWork,
+		sagasRepo,
+		2*time.Minute,
 	)
 
 	s := &Suite{
-		T:        t,
-		Ctx:      ctx,
-		Cfg:      cfg,
-		DB:       pool,
-		Redis:    rdb,
-		GH:       gh,
-		Notifier: notifier,
-		Svc:      svc,
-		SubRepo:  subscriptionsRepo,
-		RepoRepo: repositoriesRepo,
-		CodeRepo: codesRepo,
-		Factory:  factory,
+		T:          t,
+		Ctx:        ctx,
+		Cfg:        cfg,
+		DB:         pool,
+		Redis:      rdb,
+		GH:         gh,
+		Svc:        svc,
+		SubRepo:    subscriptionsRepo,
+		RepoRepo:   repositoriesRepo,
+		CodeRepo:   codesRepo,
+		SagaRepo:   sagasRepo,
+		OutboxRepo: outboxRepository,
+		Factory:    factory,
 	}
 
 	t.Cleanup(func() {
@@ -154,7 +164,7 @@ func connectRedis(t *testing.T, ctx context.Context, addr string) *redis.Client 
 func truncate(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(),
-		`TRUNCATE TABLE subscriptions, repositories, codes RESTART IDENTITY CASCADE`,
+		`TRUNCATE TABLE subscriptions, repositories, codes, saga_instances, outbox RESTART IDENTITY CASCADE`,
 	); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}

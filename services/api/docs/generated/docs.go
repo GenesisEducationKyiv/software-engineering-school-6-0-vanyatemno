@@ -83,7 +83,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Subscribe an email to receive notifications about new releases of a GitHub repository. The repository is validated via GitHub API.",
+                "description": "Starts the confirmation saga for an email + GitHub repository. Returns 202 with a saga id to poll for completion.",
                 "consumes": [
                     "application/json",
                     "application/x-www-form-urlencoded"
@@ -112,15 +112,10 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Subscription successful. Confirmation email sent.",
+                    "202": {
+                        "description": "Subscription accepted; poll status by saga id",
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
+                            "$ref": "#/definitions/dto.CreateSubscriptionResponse"
                         }
                     },
                     "400": {
@@ -147,6 +142,62 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Email already subscribed to this repository",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/subscribe/status/{sagaId}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the current state of a subscribe saga started via POST /subscribe.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "subscription"
+                ],
+                "summary": "Get subscribe saga status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Saga id returned by POST /subscribe",
+                        "name": "sagaId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current saga state",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SubscriptionStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid saga id",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Saga not found",
                         "schema": {
                             "type": "object",
                             "properties": {
@@ -270,6 +321,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "dto.CreateSubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "sagaId": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.SubscriptionResponse": {
             "type": "object",
             "properties": {
@@ -283,6 +345,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "repo": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SubscriptionStatusResponse": {
+            "type": "object",
+            "properties": {
+                "sagaId": {
+                    "type": "string"
+                },
+                "state": {
                     "type": "string"
                 }
             }
