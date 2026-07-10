@@ -2,8 +2,6 @@ package mailer
 
 import "fmt"
 
-// Message represents an email message.
-// It contains all necessary fields for constructing and sending an email.
 type Message struct {
 	To      []string
 	Subject string

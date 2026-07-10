@@ -27,7 +27,6 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	// HTTPRequestsInFlight tracks the number of HTTP requests currently being processed.
 	HTTPRequestsInFlight = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "se_school",

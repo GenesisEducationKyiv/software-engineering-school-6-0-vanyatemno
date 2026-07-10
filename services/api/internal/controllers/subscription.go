@@ -26,12 +26,6 @@ func NewSubscriptionController(
 // Subscribe handles POST /api/subscribe.
 // Accepts form-data or JSON with "email" and "repo" fields.
 //
-// Subscribing starts an orchestrated saga (create subscription + dispatch the
-// confirmation email across the notifications service). The endpoint returns
-// 202 Accepted with a saga id; the caller polls GET /subscribe/status/{sagaId}
-// to learn whether the confirmation email was dispatched (COMPLETED) or the
-// subscription was rolled back (COMPENSATED).
-//
 //	@Summary		Subscribe to release notifications
 //	@Description	Starts the confirmation saga for an email + GitHub repository. Returns 202 with a saga id to poll for completion.
 //	@Tags			subscription

@@ -10,13 +10,8 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// RegisterRoutes registers all subscription-related routes on the given Gin engine
-// under the /api base path, matching the swagger specification.
-// CORS middleware is applied globally to allow cross-origin requests.
-// Prometheus metrics middleware is applied globally to track HTTP request metrics.
-// Protected endpoints require a valid API key via the X-API-Key header.
-// Swagger UI is served at /swagger/*any.
-// Prometheus metrics are served at /metrics.
+// RegisterRoutes wires the subscription routes under /api (API-key protected),
+// plus the global middleware stack and the /swagger and /metrics endpoints.
 func RegisterRoutes(r *gin.Engine, sc *SubscriptionController, cfg *config.Application) {
 	r.Use(middlewares.RequestID())
 	r.Use(middlewares.RequestLogger())
