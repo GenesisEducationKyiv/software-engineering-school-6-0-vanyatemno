@@ -17,6 +17,12 @@ const Topic = "notifications.events"
 // fail terminally (bad payload, unknown template) or exhaust their retries.
 const DLQTopic = "notifications.events.dlq"
 
+// RepliesTopic is the topic the notifications service publishes saga replies to
+// and the API's saga orchestrator consumes. A reply reports the outcome of a
+// saga command (a confirmation email dispatch) back to the orchestrator so it
+// can complete or compensate the distributed transaction.
+const RepliesTopic = "notifications.replies"
+
 // TemplateName identifies which email template the notifications service should
 // render for a given message.
 type TemplateName = string
@@ -37,6 +43,10 @@ type Message struct {
 	// consumer can send each email at most once even if Kafka redelivers the
 	// message or the producer publishes it twice. Set via IdempotencyKey().
 	IdempotencyKey string `json:"idempotencyKey"`
+	// SagaID correlates a message that is part of an orchestrated saga with its
+	// reply on RepliesTopic. It is empty for fire-and-forget notifications (e.g.
+	// the cron repository-update alerts), for which the consumer sends no reply.
+	SagaID string `json:"sagaId,omitempty"`
 }
 
 // ConfirmEmailPayload is the body for the Confirmation template.
@@ -51,6 +61,30 @@ type RepositoryUpdateEmailPayload struct {
 	Owner          string `json:"owner"`
 	Version        string `json:"version"`
 	UnsubscribeURL string `json:"unsubscribeUrl"`
+}
+
+// ReplyStatus is the outcome the notifications service reports for a saga
+// command it consumed.
+type ReplyStatus = string
+
+const (
+	// ReplyDispatched means the email was successfully delivered to the SMTP
+	// server (the notifier's local transaction committed as SENT).
+	ReplyDispatched ReplyStatus = "dispatched"
+	// ReplyFailed means the notifier could not dispatch the email and gave up
+	// (terminal failure or retries exhausted); the orchestrator must compensate.
+	ReplyFailed ReplyStatus = "failed"
+)
+
+// Reply is the envelope the notifications service publishes to RepliesTopic to
+// report the outcome of a saga command back to the orchestrator. It is keyed by
+// SagaID so the orchestrator can load the corresponding saga instance.
+type Reply struct {
+	SagaID         string      `json:"sagaId"`
+	IdempotencyKey string      `json:"idempotencyKey"`
+	Recipient      string      `json:"recipient"`
+	Status         ReplyStatus `json:"status"`
+	Reason         string      `json:"reason,omitempty"`
 }
 
 // IdempotencyKey derives a deterministic key from a message's template and
