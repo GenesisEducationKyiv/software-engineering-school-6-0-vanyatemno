@@ -22,6 +22,25 @@ check-lint:
 swagger:
 	@cd services/api && swag init -g cmd/main.go -o docs/generated
 
+# -- gRPC / protobuf codegen ---------------------------------------------------
+#
+# The notifier's synchronous delivery API is defined in pkg/contract/notifierpb.
+# `buf` is fetched on demand via `go run` (it bundles its own proto compiler, so
+# no system protoc is needed); it invokes the protoc-gen-go / protoc-gen-go-grpc
+# plugins, which we install to GOPATH/bin first. Generated *.pb.go files are
+# checked in, so day-to-day builds and CI do not run this target.
+PROTOC_GEN_GO_VERSION := v1.36.6
+PROTOC_GEN_GO_GRPC_VERSION := v1.5.1
+BUF_VERSION := v1.50.0
+
+proto:
+	@echo "==> installing protoc plugins"
+	@GOTOOLCHAIN=local go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	@GOTOOLCHAIN=local go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
+	@echo "==> buf generate (pkg/contract)"
+	@cd pkg/contract && PATH="$(GO_PATH)/bin:$$PATH" GOTOOLCHAIN=local \
+		go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate
+
 test-unit:
 	cd services/api && go test -race -count=1 ./internal/...
 	cd services/notifications && go test -race -count=1 ./...

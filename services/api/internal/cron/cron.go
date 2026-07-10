@@ -35,7 +35,6 @@ func New(appCtx context.Context, cfg *config.Cron, repositoryService Repositorie
 	return s
 }
 
-// registerJobs adds all scheduled jobs to the cron scheduler.
 func (s *Scheduler) registerJobs(cfg *config.Cron) {
 	_, err := s.cron.AddFunc(cfg.RepoCheckSchedule, s.checkAllReposTagAndAlert)
 	if err != nil {
@@ -63,7 +62,6 @@ func (s *Scheduler) checkAllReposTagAndAlert() {
 	zap.L().Info("cron: CheckAllReposTagAndAlert completed successfully")
 }
 
-// Start begins executing all registered cron jobs.
 func (s *Scheduler) Start() {
 	zap.L().Info("starting cron scheduler")
 	s.cron.Start()

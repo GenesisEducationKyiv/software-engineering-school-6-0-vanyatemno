@@ -23,14 +23,13 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"ghnotify/contract"
 	"ghnotify/notifier/internal/dedup"
+	"ghnotify/notifier/internal/dispatch"
 	"ghnotify/notifier/internal/mailer"
-	"ghnotify/notifier/internal/repositories/delivery"
 	"ghnotify/notifier/internal/templates"
 
 	"github.com/segmentio/kafka-go"
@@ -54,40 +53,21 @@ type ReplyProducer interface {
 	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// DeliveryStore records the notifier's durable participant state for saga
-// messages (SENDING → SENT/FAILED).
-type DeliveryStore interface {
-	Claim(ctx context.Context, d *delivery.Delivery) (delivery.State, error)
-	SetState(ctx context.Context, id int64, state delivery.State, lastErr string) error
-}
-
-// retryBackoff is the pause between retry attempts. It is a var (not a const) so
-// tests can shrink it.
+// retryBackoff is the pause between retry attempts on the fire-and-forget path.
+// It is a var (not a const) so tests can shrink it.
 var retryBackoff = 500 * time.Millisecond
-
-// retryableError marks a processing failure worth retrying (a transient send or
-// dedup-store error) as opposed to a permanent one (bad payload, bad template).
-type retryableError struct{ err error }
-
-func (e retryableError) Error() string { return e.err.Error() }
-func (e retryableError) Unwrap() error { return e.err }
-
-func retryable(err error) error { return retryableError{err: err} }
-
-func isRetryable(err error) bool {
-	var r retryableError
-	return errors.As(err, &r)
-}
 
 type Worker struct {
 	reader     Reader
 	dlq        DLQProducer
 	replies    ReplyProducer
 	dedup      dedup.Deduper
-	deliveries DeliveryStore
 	templates  templates.TemplateService
 	mailer     mailer.Mailer
 	maxRetries int
+	// dispatcher is the shared at-most-once delivery core used for saga commands
+	// (the same core the gRPC server uses).
+	dispatcher *dispatch.Dispatcher
 }
 
 func New(
@@ -95,7 +75,7 @@ func New(
 	dlq DLQProducer,
 	replies ReplyProducer,
 	deduper dedup.Deduper,
-	deliveries DeliveryStore,
+	deliveries dispatch.DeliveryStore,
 	templates templates.TemplateService,
 	mailer mailer.Mailer,
 	maxRetries int,
@@ -105,10 +85,10 @@ func New(
 		dlq:        dlq,
 		replies:    replies,
 		dedup:      deduper,
-		deliveries: deliveries,
 		templates:  templates,
 		mailer:     mailer,
 		maxRetries: maxRetries,
+		dispatcher: dispatch.New(deliveries, deduper, templates, mailer, maxRetries),
 	}
 }
 
@@ -165,8 +145,11 @@ func (w *Worker) handle(ctx context.Context, msg kafka.Message) {
 	w.handleSaga(ctx, msg, m)
 }
 
-// handleSaga dispatches a saga command (a confirmation email, one recipient),
-// recording the durable delivery outcome and replying to the orchestrator.
+// handleSaga dispatches a saga command (a confirmation email, one recipient)
+// through the shared delivery core and reports the outcome to the orchestrator.
+// The dispatcher records the durable delivery state (SENDING → SENT/FAILED); a
+// genuine failure both replies "failed" and dead-letters for inspection, while an
+// already-sent delivery is an idempotent success that re-affirms "dispatched".
 func (w *Worker) handleSaga(ctx context.Context, msg kafka.Message, m contract.Message) {
 	recipient := ""
 	if len(m.Receivers) > 0 {
@@ -177,50 +160,23 @@ func (w *Worker) handleSaga(ctx context.Context, msg kafka.Message, m contract.M
 			zap.String("saga_id", m.SagaID), zap.Int("receivers", len(m.Receivers)))
 	}
 
-	d := &delivery.Delivery{
+	err := w.dispatcher.Send(ctx, dispatch.Command{
 		SagaID:         m.SagaID,
-		IdempotencyKey: m.IdempotencyKey,
-		Recipient:      recipient,
 		Template:       m.Template,
-	}
-	state, err := w.deliveries.Claim(ctx, d)
-	if err != nil {
-		// Cannot record participant state → cannot guarantee delivery. Fail the
-		// saga so it compensates deterministically, and dead-letter for inspection.
-		if ctx.Err() == nil {
-			zap.L().Error("failed to claim delivery", zap.String("saga_id", m.SagaID), zap.Error(err))
-			w.reply(ctx, m, recipient, fmt.Errorf("delivery store: %w", err))
-			w.deadLetter(ctx, msg, err)
-		}
-		w.commit(ctx, msg)
-		return
-	}
-
-	// Durable at-most-once: a prior delivery already succeeded (even if the Redis
-	// marker has since expired). Re-affirm the reply and advance.
-	if state == delivery.StateSent {
-		zap.L().Info("delivery already sent; re-affirming reply", zap.String("saga_id", m.SagaID))
-		w.reply(ctx, m, recipient, nil)
-		w.commit(ctx, msg)
-		return
-	}
-
-	perr := w.processWithRetry(ctx, m)
+		Recipient:      recipient,
+		Payload:        m.Payload,
+		IdempotencyKey: m.IdempotencyKey,
+	})
 	if ctx.Err() != nil {
 		return // shutting down — leave uncommitted for safe redelivery
 	}
 
-	if perr == nil {
-		if err := w.deliveries.SetState(ctx, d.ID, delivery.StateSent, ""); err != nil {
-			zap.L().Error("failed to mark delivery sent", zap.String("saga_id", m.SagaID), zap.Error(err))
-		}
+	if err == nil {
 		w.reply(ctx, m, recipient, nil)
 	} else {
-		if err := w.deliveries.SetState(ctx, d.ID, delivery.StateFailed, perr.Error()); err != nil {
-			zap.L().Error("failed to mark delivery failed", zap.String("saga_id", m.SagaID), zap.Error(err))
-		}
-		w.reply(ctx, m, recipient, perr)
-		w.deadLetter(ctx, msg, perr)
+		zap.L().Error("saga delivery failed", zap.String("saga_id", m.SagaID), zap.Error(err))
+		w.reply(ctx, m, recipient, err)
+		w.deadLetter(ctx, msg, err)
 	}
 	w.commit(ctx, msg)
 }
@@ -243,7 +199,7 @@ func (w *Worker) processWithRetry(ctx context.Context, m contract.Message) error
 		if err == nil {
 			return nil
 		}
-		if !isRetryable(err) {
+		if !dispatch.IsRetryable(err) {
 			return err
 		}
 	}
@@ -255,7 +211,7 @@ func (w *Worker) processWithRetry(ctx context.Context, m contract.Message) error
 // template, render failure) aborts immediately; a retryable error is returned
 // when one or more sends fail so the message can be retried.
 func (w *Worker) process(ctx context.Context, m contract.Message) error {
-	data, err := decodePayload(m.Template, m.Payload)
+	data, err := dispatch.DecodePayload(m.Template, m.Payload)
 	if err != nil {
 		return fmt.Errorf("decode payload (template %q): %w", m.Template, err)
 	}
@@ -267,7 +223,7 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 
 	var failed int
 	for _, recipient := range m.Receivers {
-		key := dedupKey(m.IdempotencyKey, recipient)
+		key := dispatch.DedupKey(m.IdempotencyKey, recipient)
 
 		claimed, err := w.dedup.Claim(ctx, key)
 		if err != nil {
@@ -278,7 +234,7 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 			continue
 		}
 		if !claimed {
-			zap.L().Info("skipping already-sent email", zap.String("recipient", recipient))
+			zap.L().Debug("skipping already-sent email", zap.String("recipient", recipient))
 			continue
 		}
 
@@ -300,12 +256,9 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 	}
 
 	if failed > 0 {
-		return retryable(fmt.Errorf("failed to send to %d recipient(s)", failed))
+		return dispatch.Retryable(fmt.Errorf("failed to send to %d recipient(s)", failed))
 	}
 
-	zap.L().Info("notification sent",
-		zap.String("template", m.Template),
-		zap.Int("receivers", len(m.Receivers)))
 	return nil
 }
 
@@ -352,31 +305,5 @@ func (w *Worker) deadLetter(ctx context.Context, msg kafka.Message, cause error)
 func (w *Worker) commit(ctx context.Context, msg kafka.Message) {
 	if err := w.reader.CommitMessages(ctx, msg); err != nil && ctx.Err() == nil {
 		zap.L().Error("failed to commit offset", zap.Error(err))
-	}
-}
-
-// dedupKey builds the per-recipient idempotency key for a message.
-func dedupKey(idempotencyKey, recipient string) string {
-	return fmt.Sprintf("notif:dedup:%s:%s", idempotencyKey, recipient)
-}
-
-// decodePayload turns the raw JSON payload into the concrete struct the email
-// template expects, based on the template name.
-func decodePayload(name contract.TemplateName, raw json.RawMessage) (any, error) {
-	switch name {
-	case contract.Confirmation:
-		var p contract.ConfirmEmailPayload
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		return p, nil
-	case contract.RepositoryUpdated:
-		var p contract.RepositoryUpdateEmailPayload
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		return p, nil
-	default:
-		return nil, fmt.Errorf("unknown template %q", name)
 	}
 }

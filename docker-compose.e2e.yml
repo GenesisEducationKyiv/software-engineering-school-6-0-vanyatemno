@@ -94,6 +94,7 @@ services:
       REDIS_DB: "0"
       KAFKA_BROKERS: "kafka-e2e:9092"
       KAFKA_REPLIES_TOPIC: "notifications.replies"
+      NOTIFIER_ADDR: "notifier:9090"
       # Disable the release-check cron during e2e by scheduling it for
       # a date that won't fire during the run.
       CRON_REPO_CHECK_SCHEDULE: "0 0 1 1 *"
@@ -105,16 +106,22 @@ services:
         condition: service_healthy
       kafka-e2e:
         condition: service_healthy
+      notifier:
+        condition: service_started
     networks:
       - github-subscriptions-e2e
 
-  # Notifications microservice: consumes jobs the API produces to Kafka and
-  # delivers them to mailpit, which the e2e tests assert against.
+  # Notifications microservice: consumes saga commands the API produces to Kafka
+  # and serves a synchronous gRPC delivery API; both deliver to mailpit, which the
+  # e2e tests assert against.
   notifier:
     build:
       context: ./
       dockerfile: ./services/notifications/Dockerfile
+    expose:
+      - '9090'
     environment:
+      GRPC_PORT: ":9090"
       MAILER_HOST: "mailpit"
       MAILER_PORT: "1025"
       MAILER_USERNAME: ""

@@ -1,18 +1,26 @@
-// Command notifier is the notifications microservice. It consumes the Kafka
-// topic the API publishes notification jobs to, renders the requested email
-// template and delivers it over SMTP. It owns no database and no domain logic —
-// its only contract with the rest of the system is ghnotify/contract. Redis is
-// used purely as an idempotency store so every email is sent at most once.
+// Command notifier is the notifications microservice. It delivers emails over
+// two transports that share one at-most-once delivery core (internal/dispatch):
+// it consumes the Kafka topic the API publishes saga commands to (confirmation
+// emails, replying with the outcome), and it serves a synchronous gRPC API the
+// API calls for repository-update alerts. Postgres records durable per-delivery
+// state (SENDING → SENT/FAILED) and Redis is a fast idempotency store, so every
+// email is sent at most once. Its only wire contract with the rest of the system
+// is ghnotify/contract.
 package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"net"
 	"os/signal"
 	"syscall"
 
+	"ghnotify/contract/notifierpb"
 	"ghnotify/notifier/internal/config"
 	"ghnotify/notifier/internal/dedup"
+	"ghnotify/notifier/internal/dispatch"
+	"ghnotify/notifier/internal/grpcserver"
 	dbInfra "ghnotify/notifier/internal/infrastructure/db"
 	kafkaInfra "ghnotify/notifier/internal/infrastructure/kafka"
 	"ghnotify/notifier/internal/logging"
@@ -23,6 +31,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -74,20 +83,50 @@ func main() {
 	replyWriter := kafkaInfra.NewReplyWriter(&cfg.Kafka)
 	defer func() { _ = replyWriter.Close() }()
 
+	// Delivery dependencies, shared by both transports.
+	deduper := dedup.NewRedisDeduper(redisClient, cfg.DedupTTL)
+	templateService := templates.New()
+	mailerService := mailer.NewMailerService(&cfg.Mailer)
+
+	// dispatcher is the at-most-once delivery core the gRPC server uses; the Kafka
+	// worker builds an equivalent one from the same stores.
+	dispatcher := dispatch.New(deliveryRepository, deduper, templateService, mailerService, cfg.Kafka.MaxRetries)
+
 	w := worker.New(
 		reader,
 		dlqWriter,
 		replyWriter,
-		dedup.NewRedisDeduper(redisClient, cfg.DedupTTL),
+		deduper,
 		deliveryRepository,
-		templates.New(),
-		mailer.NewMailerService(&cfg.Mailer),
+		templateService,
+		mailerService,
 		cfg.Kafka.MaxRetries,
 	)
+
+	// gRPC server: the API calls Notify synchronously for repository-update
+	// alerts. It runs alongside the Kafka worker and is drained on shutdown.
+	grpcServer := grpc.NewServer()
+	notifierpb.RegisterNotifierServer(grpcServer, grpcserver.New(dispatcher))
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", cfg.GRPC.Port)
+	if err != nil {
+		zap.L().Fatal("failed to listen for gRPC", zap.String("port", cfg.GRPC.Port), zap.Error(err))
+	}
+	go func() {
+		zap.L().Info("gRPC server listening", zap.String("address", cfg.GRPC.Port))
+		if serveErr := grpcServer.Serve(lis); serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
+			zap.L().Error("gRPC server stopped with error", zap.Error(serveErr))
+		}
+	}()
 
 	zap.L().Info("notifications service started")
 	if err := w.Run(ctx); err != nil {
 		zap.L().Fatal("worker stopped with error", zap.Error(err))
 	}
+
+	// Root context cancelled (SIGINT/SIGTERM): stop accepting new RPCs and drain
+	// any in-flight ones before the deferred resource closes fire.
+	zap.L().Info("shutting down gRPC server")
+	grpcServer.GracefulStop()
 	zap.L().Info("notifications service stopped")
 }

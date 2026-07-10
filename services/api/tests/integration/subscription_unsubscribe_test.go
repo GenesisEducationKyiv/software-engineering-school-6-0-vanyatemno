@@ -24,7 +24,7 @@ func TestUnsubscribe_ValidToken_SoftDeletesSubAndDropsCodes(t *testing.T) {
 		t.Fatalf("expected subscription to be soft-deleted, found %d live rows", live)
 	}
 
-	// Both codes are deleted by the AfterDelete hook.
+	// Both codes are cascade-deleted in the same Tx as the subscription.
 	if s.CodeExists(t, confirmCodeID) {
 		t.Fatalf("expected confirm code %d to be deleted after unsubscribe", confirmCodeID)
 	}

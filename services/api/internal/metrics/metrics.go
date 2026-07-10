@@ -27,7 +27,6 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	// HTTPRequestsInFlight tracks the number of HTTP requests currently being processed.
 	HTTPRequestsInFlight = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "se_school",
@@ -64,6 +63,20 @@ var (
 			Namespace: "se_school",
 			Name:      "repo_check_total",
 			Help:      "Total number of individual repository version checks",
+		},
+		[]string{"status"},
+	)
+
+	// RepoNotifyTotal counts per-subscription repository-update notifications,
+	// partitioned by outcome. "success": delivered and last_seen_tag advanced.
+	// "error": the notifier failed to deliver — last_seen_tag is left unchanged so
+	// the subscriber is retried on the next cron run. "tag_error": delivery
+	// succeeded but advancing last_seen_tag failed.
+	RepoNotifyTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "se_school",
+			Name:      "repo_notify_total",
+			Help:      "Total number of per-subscription repository-update notifications",
 		},
 		[]string{"status"},
 	)

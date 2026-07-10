@@ -23,9 +23,18 @@ type SubscriptionsRepositoryMock struct {
 	SaveErr           error
 	DeleteErr         error
 
+	// UpdateLastSeenCalls records each UpdateLastSeenTag invocation (id + tag) so
+	// tests can assert which subscriptions had their last_seen_tag advanced.
+	UpdateLastSeenCalls []UpdateLastSeenCall
+
 	// DeleteCount records how many times Delete was called (e.g. for asserting
 	// saga compensation).
 	DeleteCount int
+}
+
+type UpdateLastSeenCall struct {
+	ID  uint
+	Tag string
 }
 
 func NewSubscriptionsRepositoryMock() *SubscriptionsRepositoryMock {
@@ -52,7 +61,8 @@ func (m *SubscriptionsRepositoryMock) Create(_ context.Context, _ *models.Subscr
 	return m.CreateErr
 }
 
-func (m *SubscriptionsRepositoryMock) UpdateLastSeenTag(_ context.Context, _ uint, _ string) error {
+func (m *SubscriptionsRepositoryMock) UpdateLastSeenTag(_ context.Context, id uint, tag string) error {
+	m.UpdateLastSeenCalls = append(m.UpdateLastSeenCalls, UpdateLastSeenCall{ID: id, Tag: tag})
 	return m.UpdateLastSeenErr
 }
 

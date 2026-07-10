@@ -8,15 +8,9 @@ import (
 	"github.com/mxschmitt/playwright-go"
 )
 
-// TestUnsubscribe_HappyPath: after subscribe+confirm, navigating to
-// /unsubscribe/<code> with the real unsubscribe code (fetched from the
-// DB) flips the subscription to soft-deleted.
-//
-// We read the code from the database rather than from an email because
-// the product wires the release-notification "Unsubscribe" link using
-// the repo name, not the token. Triggering a release-notification
-// email would require a release polling cycle, which is out of scope
-// for the e2e flow tests.
+// TestUnsubscribe_HappyPath: subscribe+confirm, then unsubscribe via the code
+// soft-deletes the subscription. The code is read from the DB, not an email,
+// because the release-notification unsubscribe link is keyed by repo name.
 func TestUnsubscribe_HappyPath(t *testing.T) {
 	s := helpers.NewSuite(t)
 	email := "unsub-ok@e2e.local"
