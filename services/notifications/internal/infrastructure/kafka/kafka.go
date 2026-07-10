@@ -32,6 +32,17 @@ func NewDLQWriter(cfg *config.Kafka) *kafka.Writer {
 	}
 }
 
+// NewReplyWriter builds a producer for the saga replies topic. Replies are keyed
+// by saga id (Hash balancer) so a saga's replies keep per-partition order.
+func NewReplyWriter(cfg *config.Kafka) *kafka.Writer {
+	return &kafka.Writer{
+		Addr:         kafka.TCP(brokers(cfg)...),
+		Topic:        cfg.RepliesTopic,
+		Balancer:     &kafka.Hash{},
+		RequiredAcks: kafka.RequireAll,
+	}
+}
+
 // brokers splits the comma-separated broker list into trimmed addresses.
 func brokers(cfg *config.Kafka) []string {
 	parts := strings.Split(cfg.Brokers, ",")

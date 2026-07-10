@@ -13,9 +13,11 @@ import (
 
 	"ghnotify/notifier/internal/config"
 	"ghnotify/notifier/internal/dedup"
+	dbInfra "ghnotify/notifier/internal/infrastructure/db"
 	kafkaInfra "ghnotify/notifier/internal/infrastructure/kafka"
 	"ghnotify/notifier/internal/logging"
 	"ghnotify/notifier/internal/mailer"
+	"ghnotify/notifier/internal/repositories/delivery"
 	"ghnotify/notifier/internal/templates"
 	"ghnotify/notifier/internal/worker"
 
@@ -54,15 +56,30 @@ func main() {
 	defer func() { _ = redisClient.Close() }()
 	zap.L().Info("connected to redis", zap.String("address", cfg.Redis.Address))
 
+	// Postgres is the notifier's durable participant state: it records each
+	// confirmation email's dispatch outcome (SENDING → SENT/FAILED), which the
+	// saga reply is derived from.
+	database, err := dbInfra.Connect(&cfg.Database)
+	if err != nil {
+		zap.L().Fatal("failed to connect to database", zap.Error(err))
+	}
+	defer database.Close()
+	zap.L().Info("connected to database")
+	deliveryRepository := delivery.New(database)
+
 	reader := kafkaInfra.NewReader(&cfg.Kafka)
 	defer func() { _ = reader.Close() }()
 	dlqWriter := kafkaInfra.NewDLQWriter(&cfg.Kafka)
 	defer func() { _ = dlqWriter.Close() }()
+	replyWriter := kafkaInfra.NewReplyWriter(&cfg.Kafka)
+	defer func() { _ = replyWriter.Close() }()
 
 	w := worker.New(
 		reader,
 		dlqWriter,
+		replyWriter,
 		dedup.NewRedisDeduper(redisClient, cfg.DedupTTL),
+		deliveryRepository,
 		templates.New(),
 		mailer.NewMailerService(&cfg.Mailer),
 		cfg.Kafka.MaxRetries,

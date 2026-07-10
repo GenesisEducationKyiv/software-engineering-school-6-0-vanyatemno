@@ -25,10 +25,11 @@ const (
 )
 
 type Config struct {
-	Kafka  Kafka  `mapstructure:"KAFKA"`
-	Redis  Redis  `mapstructure:"REDIS"`
-	Mailer Mailer `mapstructure:"MAILER"`
-	Log    Log    `mapstructure:"LOG"`
+	Kafka    Kafka    `mapstructure:"KAFKA"`
+	Redis    Redis    `mapstructure:"REDIS"`
+	Mailer   Mailer   `mapstructure:"MAILER"`
+	Database Database `mapstructure:"DB"`
+	Log      Log      `mapstructure:"LOG"`
 
 	// DedupTTL bounds how long per-recipient idempotency markers live in Redis.
 	// It must comfortably exceed any redelivery/republish window.
@@ -37,13 +38,22 @@ type Config struct {
 
 // Kafka configures the consumer. Brokers is a comma-separated list (a single
 // address is the common case); GroupID is the consumer group; MaxRetries bounds
-// transient-failure retries before a message is dead-lettered.
+// transient-failure retries before a message is dead-lettered. RepliesTopic is
+// where the worker publishes saga replies back to the API orchestrator.
 type Kafka struct {
-	Brokers    string `mapstructure:"BROKERS" default:"localhost:9092"`
-	Topic      string `mapstructure:"TOPIC" default:"notifications.events"`
-	DLQTopic   string `mapstructure:"DLQ_TOPIC" default:"notifications.events.dlq"`
-	GroupID    string `mapstructure:"GROUP_ID" default:"notifications-service"`
-	MaxRetries int    `mapstructure:"MAX_RETRIES" default:"3"`
+	Brokers      string `mapstructure:"BROKERS" default:"localhost:9092"`
+	Topic        string `mapstructure:"TOPIC" default:"notifications.events"`
+	DLQTopic     string `mapstructure:"DLQ_TOPIC" default:"notifications.events.dlq"`
+	RepliesTopic string `mapstructure:"REPLIES_TOPIC" default:"notifications.replies"`
+	GroupID      string `mapstructure:"GROUP_ID" default:"notifications-service"`
+	MaxRetries   int    `mapstructure:"MAX_RETRIES" default:"3"`
+}
+
+// Database configures the notifier's own Postgres, where it records the durable
+// delivery state that makes it a genuine saga participant. DSN is empty by
+// default so a misconfiguration fails fast at startup.
+type Database struct {
+	DSN string `mapstructure:"DSN" default:""`
 }
 
 type Redis struct {
