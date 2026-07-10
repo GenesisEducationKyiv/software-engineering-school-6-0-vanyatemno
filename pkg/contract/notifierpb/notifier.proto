@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package notifier.v1;
+
+option go_package = "ghnotify/contract/notifierpb";
+
+// Notifier is the synchronous delivery API the notifications service exposes to
+// the API service. The API calls Notify once per subscription on a repository
+// update and waits for the outcome: a successful reply lets it advance the
+// subscription's last_seen_tag, a failure leaves the tag untouched so the
+// subscriber is retried on the next cron run.
+service Notifier {
+  rpc Notify(NotifyRequest) returns (NotifyResponse);
+}
+
+message NotifyRequest {
+  // template is the email template to render (see ghnotify/contract template names).
+  string template = 1;
+  // recipient is the single email address this call delivers to.
+  string recipient = 2;
+  // payload is the template-specific body as JSON (e.g. RepositoryUpdateEmailPayload).
+  bytes payload = 3;
+  // idempotency_key deterministically identifies the notification so the server
+  // sends each (key, recipient) email at most once across retries/redeliveries.
+  string idempotency_key = 4;
+}
+
+message NotifyResponse {
+  // ok is true when the email was delivered or was already delivered previously
+  // (idempotent skip). The caller may advance last_seen_tag only when ok is true.
+  bool ok = 1;
+  // reason carries a human-readable failure description when ok is false.
+  string reason = 2;
+}
