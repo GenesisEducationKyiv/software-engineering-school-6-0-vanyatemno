@@ -14,7 +14,6 @@ type SubscriptionController struct {
 	subscriptionService SubscriptionsService
 }
 
-// NewSubscriptionController creates a new SubscriptionController backed by the given service.
 func NewSubscriptionController(
 	subscriptionService SubscriptionsService,
 ) *SubscriptionController {

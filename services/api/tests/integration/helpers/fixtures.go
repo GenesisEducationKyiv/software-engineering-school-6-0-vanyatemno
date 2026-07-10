@@ -139,7 +139,6 @@ func (s *Suite) CountSagas(t *testing.T) int64 {
 	return n
 }
 
-// SagaState returns the state of the saga with the given id.
 func (s *Suite) SagaState(t *testing.T, id string) string {
 	t.Helper()
 	var state string

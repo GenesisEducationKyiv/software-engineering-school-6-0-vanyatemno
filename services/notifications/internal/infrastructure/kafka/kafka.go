@@ -22,7 +22,6 @@ func NewReader(cfg *config.Kafka) *kafka.Reader {
 	})
 }
 
-// NewDLQWriter builds a producer for the dead-letter topic.
 func NewDLQWriter(cfg *config.Kafka) *kafka.Writer {
 	return &kafka.Writer{
 		Addr:         kafka.TCP(brokers(cfg)...),

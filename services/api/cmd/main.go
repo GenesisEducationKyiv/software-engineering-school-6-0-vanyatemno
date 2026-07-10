@@ -84,7 +84,6 @@ func main() {
 		zap.L().Fatal("failed to connect to redis", zap.Error(err))
 	}
 
-	// Repositories
 	subscriptionRepository := subRepo.New(database)
 	repositoryRepository := repoRepo.New(database)
 	codeRepository := codeRepo.New(database)
@@ -96,10 +95,8 @@ func main() {
 	transactor := db.NewTransactor(database)
 	unitOfWork := uow.New(transactor, subscriptionRepository, codeRepository, sagaRepository, outboxRepository)
 
-	// Domain
 	codeFactory := codes.NewFactory()
 
-	// Integrations
 	githubIntegration, err := github.New(&cfg.Github, redisClient)
 	if err != nil {
 		zap.L().Fatal("failed to initialize github integration", zap.Error(err))
@@ -117,7 +114,6 @@ func main() {
 	// Publisher is retained for the cron release-notification path (fire-and-forget).
 	notificationPublisher := publisher.New(ctx, kafkaWriter)
 
-	// Services
 	subscriptionService := subscriptionSvc.New(
 		cfg.FrontendURL,
 		subscriptionRepository,
@@ -171,11 +167,9 @@ func main() {
 		}
 	}()
 
-	// Cron
 	cron := cronScheduler.New(ctx, &cfg.Cron, repositoryService)
 	cron.Start()
 
-	// Controllers
 	subscriptionController := controllers.NewSubscriptionController(subscriptionService)
 
 	// Router. gin.New() (not gin.Default()) is used so request logging and

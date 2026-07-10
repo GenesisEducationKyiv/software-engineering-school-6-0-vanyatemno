@@ -58,7 +58,6 @@ func (r *Repository) Create(ctx context.Context, s *models.SagaInstance) error {
 	return row.Scan(&s.CreatedAt, &s.UpdatedAt)
 }
 
-// GetByID loads a saga by its id.
 func (r *Repository) GetByID(ctx context.Context, id string) (*models.SagaInstance, error) {
 	row := r.db.QueryRow(ctx, `SELECT `+sagaColumns+` FROM saga_instances WHERE id = $1`, id)
 	s, err := scanSaga(row)

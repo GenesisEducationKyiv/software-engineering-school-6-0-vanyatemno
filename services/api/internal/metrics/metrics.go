@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	// HTTPRequestsTotal counts the total number of HTTP requests, partitioned by method, path, and status code.
 	HTTPRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "se_school",
@@ -16,7 +15,6 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	// HTTPRequestDuration observes the duration of HTTP requests in seconds, partitioned by method, path, and status code.
 	HTTPRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "se_school",
@@ -27,7 +25,6 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	// HTTPRequestsInFlight tracks the number of HTTP requests currently being processed.
 	HTTPRequestsInFlight = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "se_school",
@@ -36,7 +33,6 @@ var (
 		},
 	)
 
-	// CronJobRunsTotal counts cron job executions, partitioned by job name and outcome (success/error).
 	CronJobRunsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "se_school",
@@ -46,7 +42,6 @@ var (
 		[]string{"job", "status"},
 	)
 
-	// CronJobDuration observes the duration of cron job executions in seconds, partitioned by job name.
 	// Buckets span seconds to minutes since background jobs run far longer than HTTP requests.
 	CronJobDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -58,7 +53,6 @@ var (
 		[]string{"job"},
 	)
 
-	// RepoCheckTotal counts individual repository checks within a cron run, partitioned by outcome (success/error).
 	RepoCheckTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "se_school",

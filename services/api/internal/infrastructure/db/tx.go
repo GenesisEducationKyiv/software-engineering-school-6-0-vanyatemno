@@ -33,7 +33,6 @@ type Transactor struct {
 	pool *pgxpool.Pool
 }
 
-// NewTransactor returns a Transactor bound to the given pool.
 func NewTransactor(pool *pgxpool.Pool) *Transactor {
 	return &Transactor{pool: pool}
 }
