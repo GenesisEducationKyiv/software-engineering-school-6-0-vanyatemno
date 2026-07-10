@@ -23,8 +23,6 @@ type SubscriptionsRepositoryMock struct {
 	SaveErr           error
 	DeleteErr         error
 
-	// DeleteCount records how many times Delete was called (e.g. for asserting
-	// saga compensation).
 	DeleteCount int
 }
 

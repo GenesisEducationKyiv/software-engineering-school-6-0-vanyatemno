@@ -87,7 +87,6 @@ func (s *Service) Sweep(ctx context.Context, limit int) error {
 	return nil
 }
 
-// Status returns the current saga instance for the status-polling endpoint.
 func (s *Service) Status(ctx context.Context, sagaID string) (*models.SagaInstance, error) {
 	return s.sagaRepository.GetByID(ctx, sagaID)
 }

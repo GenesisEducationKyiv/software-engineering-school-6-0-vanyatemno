@@ -6,7 +6,6 @@ import (
 	"se-school/internal/models"
 )
 
-// RepositoryMock is a hand-written mock of the outbox repository for unit tests.
 type RepositoryMock struct {
 	Created  []*models.OutboxMessage
 	CreateFn func(ctx context.Context, m *models.OutboxMessage) error

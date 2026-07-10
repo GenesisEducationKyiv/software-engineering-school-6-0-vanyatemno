@@ -9,8 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// PrometheusMiddleware returns a Gin middleware that records HTTP request metrics
-// (total requests, request duration, and in-flight requests) using Prometheus.
 // The path label is normalized to the route pattern (e.g. /api/confirm/:token)
 // to avoid high-cardinality label values.
 func PrometheusMiddleware() gin.HandlerFunc {

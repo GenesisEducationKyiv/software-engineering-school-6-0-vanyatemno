@@ -1,6 +1,5 @@
-// Package outbox is the data-access layer for the transactional outbox. Rows are
-// written inside the orchestrator's atomic create (via WithTx) and later drained
-// by the relay, which publishes each to Kafka and marks it published.
+// Package outbox is the data-access layer for the transactional outbox: rows
+// written in the orchestrator's atomic create (via WithTx) and drained by the relay.
 package outbox
 
 import (
@@ -27,7 +26,6 @@ func (r *Repository) WithTx(tx pgx.Tx) *Repository {
 	return &Repository{db: tx}
 }
 
-// Create persists an unpublished outbox message (id set by the caller).
 func (r *Repository) Create(ctx context.Context, m *models.OutboxMessage) error {
 	row := r.db.QueryRow(ctx,
 		`INSERT INTO outbox (id, saga_id, topic, kafka_key, payload)
@@ -38,7 +36,6 @@ func (r *Repository) Create(ctx context.Context, m *models.OutboxMessage) error 
 	return row.Scan(&m.CreatedAt)
 }
 
-// GetUnpublished returns the oldest messages not yet published, up to limit.
 func (r *Repository) GetUnpublished(ctx context.Context, limit int) ([]*models.OutboxMessage, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, saga_id, topic, kafka_key, payload, published_at, attempts, last_error, created_at
@@ -71,13 +68,11 @@ func (r *Repository) GetUnpublished(ctx context.Context, limit int) ([]*models.O
 	return out, rows.Err()
 }
 
-// MarkPublished stamps published_at, so the relay never re-publishes the row.
 func (r *Repository) MarkPublished(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, `UPDATE outbox SET published_at = NOW() WHERE id = $1`, id)
 	return err
 }
 
-// MarkFailed records a failed publish attempt (relay retries on the next tick).
 func (r *Repository) MarkFailed(ctx context.Context, id, cause string) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE outbox SET attempts = attempts + 1, last_error = $1 WHERE id = $2`,

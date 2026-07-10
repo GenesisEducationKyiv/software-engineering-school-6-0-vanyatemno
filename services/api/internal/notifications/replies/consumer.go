@@ -1,8 +1,6 @@
-// Package replies consumes saga replies from Kafka and drives the orchestrator.
-// It is the return path of the distributed transaction: the notifications
-// service reports whether it dispatched the confirmation email, and this
-// consumer hands each reply to the orchestrator to complete or compensate the
-// saga.
+// Package replies consumes saga replies from Kafka — the return path of the
+// distributed transaction — and hands each to the orchestrator to complete or
+// compensate the saga.
 package replies
 
 import (
@@ -23,8 +21,6 @@ type Reader interface {
 	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// Handler applies a reply to the saga state machine (satisfied by the
-// subscription orchestrator's HandleReply).
 type Handler interface {
 	HandleReply(ctx context.Context, reply contract.Reply) error
 }

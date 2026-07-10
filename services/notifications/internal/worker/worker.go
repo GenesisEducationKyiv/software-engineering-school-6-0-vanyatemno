@@ -1,23 +1,7 @@
-// Package worker consumes notification jobs from Kafka, renders the requested
-// email template and sends it over SMTP. It is the asynchronous counterpart of
-// the API's publisher: the API publishes a contract.Message, this worker turns
-// it into an actual email.
-//
-// Delivery is at-least-once (durable log + manual offset commit), so a message
-// can be redelivered — e.g. if the worker crashes after sending but before
-// committing. To keep every email at-most-once, the worker claims a per-recipient
-// idempotency marker before sending and skips any recipient already claimed.
-// Messages that fail terminally (bad payload, unknown template) or exhaust their
-// retries are routed to a dead-letter topic. The offset is committed in every
-// outcome so the consumer always advances and never loops on a poison message.
-//
-// Saga messages (those carrying a SagaID) are also durable participants in a
-// distributed transaction: the worker records the dispatch outcome in its own
-// database (SENDING → SENT/FAILED) and publishes a reply on the replies topic so
-// the API orchestrator can complete or compensate the saga. The delivery table
-// is the authoritative at-most-once guard for these (it outlives the Redis TTL).
-// Fire-and-forget messages (no SagaID, e.g. the cron release alerts) keep their
-// original behavior and produce no reply and no delivery record.
+// Package worker consumes notification jobs from Kafka, renders the email
+// template and sends it over SMTP. Delivery is at-least-once with a per-recipient
+// idempotency guard (at-most-once emails); saga messages (with a SagaID) also
+// record a durable delivery outcome and reply to the orchestrator.
 package worker
 
 import (
@@ -37,36 +21,31 @@ import (
 	"go.uber.org/zap"
 )
 
-// Reader is the subset of *kafka.Reader the worker needs, defined as an
-// interface so tests can drive the worker without a real broker.
+// Reader is the subset of *kafka.Reader the worker uses, as an interface so
+// tests can run without a real broker.
 type Reader interface {
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// DLQProducer writes messages that cannot be processed to the dead-letter topic.
 type DLQProducer interface {
 	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// ReplyProducer publishes saga replies to the replies topic.
 type ReplyProducer interface {
 	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// DeliveryStore records the notifier's durable participant state for saga
-// messages (SENDING → SENT/FAILED).
 type DeliveryStore interface {
 	Claim(ctx context.Context, d *delivery.Delivery) (delivery.State, error)
 	SetState(ctx context.Context, id int64, state delivery.State, lastErr string) error
 }
 
-// retryBackoff is the pause between retry attempts. It is a var (not a const) so
-// tests can shrink it.
+// retryBackoff is a var (not a const) so tests can shrink it.
 var retryBackoff = 500 * time.Millisecond
 
-// retryableError marks a processing failure worth retrying (a transient send or
-// dedup-store error) as opposed to a permanent one (bad payload, bad template).
+// retryableError marks a transient failure (send or dedup-store error) as
+// retryable, versus a permanent one (bad payload or template).
 type retryableError struct{ err error }
 
 func (e retryableError) Error() string { return e.err.Error() }
@@ -112,7 +91,6 @@ func New(
 	}
 }
 
-// Run consumes messages until ctx is canceled.
 func (w *Worker) Run(ctx context.Context) error {
 	zap.L().Info("consuming notifications topic")
 	for {
@@ -165,8 +143,6 @@ func (w *Worker) handle(ctx context.Context, msg kafka.Message) {
 	w.handleSaga(ctx, msg, m)
 }
 
-// handleSaga dispatches a saga command (a confirmation email, one recipient),
-// recording the durable delivery outcome and replying to the orchestrator.
 func (w *Worker) handleSaga(ctx context.Context, msg kafka.Message, m contract.Message) {
 	recipient := ""
 	if len(m.Receivers) > 0 {
@@ -225,9 +201,8 @@ func (w *Worker) handleSaga(ctx context.Context, msg kafka.Message, m contract.M
 	w.commit(ctx, msg)
 }
 
-// processWithRetry runs process, retrying transient failures up to maxRetries.
 // Retries are dedup-safe: recipients sent on an earlier attempt stay claimed and
-// are skipped, so only the recipients that failed are re-attempted.
+// are skipped, so only the failed recipients are re-attempted.
 func (w *Worker) processWithRetry(ctx context.Context, m contract.Message) error {
 	var err error
 	for attempt := 0; attempt <= w.maxRetries; attempt++ {
@@ -309,8 +284,7 @@ func (w *Worker) process(ctx context.Context, m contract.Message) error {
 	return nil
 }
 
-// reply publishes a saga reply: dispatched when cause is nil, otherwise failed
-// (with the cause as the reason). Keyed by SagaID for per-saga ordering.
+// Saga replies are keyed by SagaID for per-saga (per-partition) ordering.
 func (w *Worker) reply(ctx context.Context, m contract.Message, recipient string, cause error) {
 	status := contract.ReplyDispatched
 	reason := ""
@@ -339,7 +313,6 @@ func (w *Worker) reply(ctx context.Context, m contract.Message, recipient string
 		zap.String("saga_id", m.SagaID), zap.String("status", status))
 }
 
-// deadLetter publishes a failed message to the DLQ topic, preserving its key.
 func (w *Worker) deadLetter(ctx context.Context, msg kafka.Message, cause error) {
 	zap.L().Error("dead-lettering notification", zap.Error(cause))
 	if err := w.dlq.WriteMessages(ctx, kafka.Message{Key: msg.Key, Value: msg.Value}); err != nil {
@@ -347,21 +320,17 @@ func (w *Worker) deadLetter(ctx context.Context, msg kafka.Message, cause error)
 	}
 }
 
-// commit advances the consumer offset. Called in every terminal outcome so the
-// consumer never loops on a poison message.
+// Called in every terminal outcome so the consumer never loops on a poison message.
 func (w *Worker) commit(ctx context.Context, msg kafka.Message) {
 	if err := w.reader.CommitMessages(ctx, msg); err != nil && ctx.Err() == nil {
 		zap.L().Error("failed to commit offset", zap.Error(err))
 	}
 }
 
-// dedupKey builds the per-recipient idempotency key for a message.
 func dedupKey(idempotencyKey, recipient string) string {
 	return fmt.Sprintf("notif:dedup:%s:%s", idempotencyKey, recipient)
 }
 
-// decodePayload turns the raw JSON payload into the concrete struct the email
-// template expects, based on the template name.
 func decodePayload(name contract.TemplateName, raw json.RawMessage) (any, error) {
 	switch name {
 	case contract.Confirmation:

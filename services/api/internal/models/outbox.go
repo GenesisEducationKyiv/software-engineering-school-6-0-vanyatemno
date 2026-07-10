@@ -2,9 +2,8 @@ package models
 
 import "time"
 
-// OutboxMessage is a row of the transactional outbox: a Kafka message persisted
-// atomically with the state change that produced it, later published by the
-// relay. PublishedAt is nil until the relay has written it to the broker.
+// OutboxMessage is persisted atomically with the state change that produced it,
+// then published by the relay. PublishedAt is nil until published to the broker.
 type OutboxMessage struct {
 	ID          string
 	SagaID      string

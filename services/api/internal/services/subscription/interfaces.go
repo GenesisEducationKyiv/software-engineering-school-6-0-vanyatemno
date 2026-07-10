@@ -42,8 +42,6 @@ type SubscriptionsRepository interface {
 	Delete(ctx context.Context, subscription *models.Subscription) error
 }
 
-// SagaRepository persists the saga state machine that coordinates the
-// distributed Subscribe→confirmation-email transaction.
 type SagaRepository interface {
 	Create(ctx context.Context, s *models.SagaInstance) error
 	GetByID(ctx context.Context, id string) (*models.SagaInstance, error)
@@ -51,8 +49,8 @@ type SagaRepository interface {
 	GetStuck(ctx context.Context, state models.SagaState, before time.Time, limit int) ([]*models.SagaInstance, error)
 }
 
-// OutboxRepository persists outbox commands. Create participates in the atomic
-// T1 via the UnitOfWork; the relay drains rows using the concrete repository.
+// Only Create is exposed here: it participates in the atomic T1 via the
+// UnitOfWork, while the relay drains rows using the concrete repository.
 type OutboxRepository interface {
 	Create(ctx context.Context, m *models.OutboxMessage) error
 }
@@ -66,10 +64,9 @@ type TxRepos struct {
 	Outbox        OutboxRepository
 }
 
-// UnitOfWork runs a function within one database transaction, exposing the
-// transaction-bound repositories. It generalizes the single hand-rolled
-// transaction in repositories/subscription manager.go::Delete so the
-// orchestrator can persist the whole T1 atomically.
+// UnitOfWork generalizes the hand-rolled transaction in
+// repositories/subscription manager.go::Delete so the orchestrator can persist
+// all of T1 atomically.
 type UnitOfWork interface {
 	Do(ctx context.Context, fn func(ctx context.Context, r *TxRepos) error) error
 }

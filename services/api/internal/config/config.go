@@ -14,10 +14,8 @@ type Config struct {
 	FrontendURL string      `mapstructure:"FRONTEND_URL" json:"FRONTEND_URL" yaml:"FRONTEND_URL"`
 }
 
-// Kafka configures the producer that publishes notification jobs and the
-// consumer that reads saga replies. Brokers is a comma-separated list (a single
-// address is the common case); Topic, DLQTopic and RepliesTopic default to the
-// canonical names in ghnotify/contract.
+// Brokers is a comma-separated list; the topic names default to the
+// ghnotify/contract values.
 type Kafka struct {
 	Brokers      string `mapstructure:"BROKERS" json:"BROKERS" yaml:"BROKERS" default:"localhost:9092"`
 	Topic        string `mapstructure:"TOPIC" json:"TOPIC" yaml:"TOPIC" default:"notifications.events"`
@@ -26,9 +24,8 @@ type Kafka struct {
 	SagaGroupID  string `mapstructure:"SAGA_GROUP_ID" json:"SAGA_GROUP_ID" yaml:"SAGA_GROUP_ID" default:"saga-orchestrator"`
 }
 
-// Saga tunes the orchestrator's background loops. Deadline bounds how long a
-// saga may await the notifier's reply before the sweeper compensates it;
-// RelayInterval/SweepInterval pace the outbox relay and the stuck-saga sweeper.
+// Deadline bounds how long a saga may await the notifier's reply before the
+// sweeper compensates it.
 type Saga struct {
 	Deadline      time.Duration `mapstructure:"DEADLINE" json:"DEADLINE" yaml:"DEADLINE" default:"2m"`
 	RelayInterval time.Duration `mapstructure:"RELAY_INTERVAL" json:"RELAY_INTERVAL" yaml:"RELAY_INTERVAL" default:"1s"`
@@ -36,9 +33,8 @@ type Saga struct {
 	BatchSize     int           `mapstructure:"BATCH_SIZE" json:"BATCH_SIZE" yaml:"BATCH_SIZE" default:"100"`
 }
 
-// Log configures structured application logging. The defaults emit JSON to
-// stdout, which is what the Filebeat -> Elasticsearch -> Kibana pipeline
-// consumes. Set ENCODING=console for human-readable local development.
+// Defaults emit JSON to stdout for the Filebeat → Elasticsearch → Kibana
+// pipeline; set ENCODING=console for human-readable local development.
 type Log struct {
 	Level       string `mapstructure:"LEVEL" json:"LEVEL" yaml:"LEVEL" default:"info"`
 	Encoding    string `mapstructure:"ENCODING" json:"ENCODING" yaml:"ENCODING" default:"json"`

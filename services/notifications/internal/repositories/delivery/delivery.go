@@ -1,7 +1,5 @@
-// Package delivery is the data-access layer for the notifier's deliveries table
-// — its durable participant state in the distributed transaction. Claim records
-// (idempotently) that a confirmation email is being dispatched; SetState records
-// the terminal outcome the saga reply is built from.
+// Package delivery is the data-access layer for the notifier's deliveries table,
+// its durable saga-participant state.
 package delivery
 
 import (
@@ -11,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// State is the lifecycle of a single email dispatch.
 type State = string
 
 const (
@@ -20,7 +17,6 @@ const (
 	StateFailed  State = "FAILED"
 )
 
-// Delivery is one recipient's dispatch record for a saga command.
 type Delivery struct {
 	ID             int64
 	SagaID         string

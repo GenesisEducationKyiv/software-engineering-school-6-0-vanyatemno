@@ -1,7 +1,5 @@
-// Package saga is the data-access layer for saga_instances — the durable state
-// machine of the orchestrated Subscribe→confirmation-email distributed
-// transaction. Like the other repositories it holds a db.DBTX, so it can run
-// against the pool directly or join the orchestrator's atomic create via WithTx.
+// Package saga is the data-access layer for saga_instances, the durable state
+// machine of the orchestrated Subscribe→confirmation-email saga.
 package saga
 
 import (
@@ -45,7 +43,6 @@ func scanSaga(row pgx.Row) (*models.SagaInstance, error) {
 	return &s, nil
 }
 
-// Create inserts a new saga instance (id/state/deadline set by the caller).
 func (r *Repository) Create(ctx context.Context, s *models.SagaInstance) error {
 	row := r.db.QueryRow(ctx,
 		`INSERT INTO saga_instances
@@ -70,8 +67,6 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*models.SagaInstan
 	return s, nil
 }
 
-// UpdateState transitions a saga to a new state, recording lastErr (empty string
-// when none) and bumping updated_at.
 func (r *Repository) UpdateState(ctx context.Context, id string, state models.SagaState, lastErr string) error {
 	res, err := r.db.Exec(ctx,
 		`UPDATE saga_instances SET state = $1, last_error = $2, updated_at = NOW() WHERE id = $3`,
@@ -86,8 +81,6 @@ func (r *Repository) UpdateState(ctx context.Context, id string, state models.Sa
 	return nil
 }
 
-// IncrementAttempts bumps the attempt counter and returns the new value; used by
-// the sweeper to cap re-drive/compensation attempts.
 func (r *Repository) IncrementAttempts(ctx context.Context, id string) (int, error) {
 	var attempts int
 	row := r.db.QueryRow(ctx,
@@ -103,8 +96,6 @@ func (r *Repository) IncrementAttempts(ctx context.Context, id string) (int, err
 	return attempts, nil
 }
 
-// GetStuck returns sagas in the given state whose deadline has passed, so the
-// sweeper can compensate them (a reply that never arrived).
 func (r *Repository) GetStuck(ctx context.Context, state models.SagaState, before time.Time, limit int) ([]*models.SagaInstance, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT `+sagaColumns+`

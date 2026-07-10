@@ -7,14 +7,12 @@ import (
 	"se-school/internal/models"
 )
 
-// StateChange records one UpdateState call for assertions.
 type StateChange struct {
 	ID      string
 	State   models.SagaState
 	LastErr string
 }
 
-// RepositoryMock is a hand-written mock of the saga repository for unit tests.
 type RepositoryMock struct {
 	Created  []*models.SagaInstance
 	CreateFn func(ctx context.Context, s *models.SagaInstance) error

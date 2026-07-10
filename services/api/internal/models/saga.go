@@ -2,7 +2,6 @@ package models
 
 import "time"
 
-// SagaState is the state of an orchestrated-saga instance.
 type SagaState = string
 
 const (
@@ -23,11 +22,8 @@ const (
 	SagaStateFailed SagaState = "FAILED"
 )
 
-// SagaTypeSubscribeConfirm identifies the "create subscription + dispatch
-// confirmation email" saga.
 const SagaTypeSubscribeConfirm = "subscribe_confirm"
 
-// SagaInstance is the durable record of one orchestrated saga.
 type SagaInstance struct {
 	ID             string
 	Type           string

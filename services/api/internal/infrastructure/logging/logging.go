@@ -1,10 +1,6 @@
-// Package logging builds the application's structured logger and provides
-// helpers for propagating a request-scoped logger through context.Context.
-//
-// Logs are emitted as JSON to stdout using Elastic Common Schema (ECS)-friendly
-// field names (@timestamp, log.level, message, service.*). This lets Filebeat
-// collect the container's stdout, ship it to Elasticsearch without extra
-// parsing, and makes the documents searchable/aggregatable in Kibana.
+// Package logging builds the app's structured logger and propagates a
+// request-scoped logger through context. Logs are JSON to stdout with Elastic
+// Common Schema field names for the Filebeat → Elasticsearch → Kibana pipeline.
 package logging
 
 import (
@@ -18,17 +14,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// encodingConsole selects the human-readable encoder used for local development.
 const encodingConsole = "console"
 
 type ctxKey struct{}
 
-// loggerCtxKey is the context key under which the request-scoped logger is stored.
 var loggerCtxKey = ctxKey{}
 
-// Init builds a *zap.Logger from configuration. The returned logger writes
-// structured JSON (or console output when cfg.Encoding == "console") to stdout
-// and is decorated with service metadata so every record is attributable to a
+// Init attaches service metadata to every record so logs are attributable to a
 // service/version/environment in Kibana.
 func Init(cfg *config.Log) (*zap.Logger, error) {
 	level, err := zapcore.ParseLevel(cfg.Level)
@@ -80,14 +72,12 @@ func Init(cfg *config.Log) (*zap.Logger, error) {
 	return logger, nil
 }
 
-// ContextWithLogger returns a copy of ctx carrying the provided logger so that
-// downstream code can retrieve a request-scoped logger via FromContext.
 func ContextWithLogger(ctx context.Context, logger *zap.Logger) context.Context {
 	return context.WithValue(ctx, loggerCtxKey, logger)
 }
 
-// FromContext returns the logger stored in ctx by ContextWithLogger, falling
-// back to the global logger (zap.L()) when none is present. It never returns nil.
+// FromContext falls back to the global logger (zap.L()) when none is present; it
+// never returns nil.
 func FromContext(ctx context.Context) *zap.Logger {
 	if logger, ok := ctx.Value(loggerCtxKey).(*zap.Logger); ok && logger != nil {
 		return logger

@@ -1,7 +1,5 @@
-// Package kafka builds the API service's Kafka producer and ensures the topics
-// it publishes to exist. It is the API side of the notifications transport: the
-// publisher writes contract.Message envelopes here and the notifications service
-// consumes them.
+// Package kafka builds the API's Kafka producer and reply reader and ensures its
+// topics exist — the API side of the notifications transport.
 package kafka
 
 import (
@@ -16,9 +14,8 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// NewWriter builds a producer for cfg.Topic. RequireAll (acks=all) makes a
-// successful write durable across the cluster, and the Hash balancer routes by
-// message Key so all copies of the same notification land on one partition.
+// RequireAll (acks=all) makes writes durable across the cluster; the Hash
+// balancer routes by message Key so copies of a notification share a partition.
 func NewWriter(cfg *config.Kafka) *kafka.Writer {
 	return &kafka.Writer{
 		Addr:         kafka.TCP(brokers(cfg)...),
@@ -28,9 +25,8 @@ func NewWriter(cfg *config.Kafka) *kafka.Writer {
 	}
 }
 
-// EnsureTopics creates the main and dead-letter topics if they are absent, so
-// behaviour is deterministic instead of depending on broker auto-creation. It
-// is a no-op when the topics already exist.
+// EnsureTopics creates the topics up front so behaviour doesn't depend on broker
+// auto-creation. No-op when they already exist.
 func EnsureTopics(ctx context.Context, cfg *config.Kafka) error {
 	addrs := brokers(cfg)
 	conn, err := kafka.DialContext(ctx, "tcp", addrs[0])
@@ -61,7 +57,6 @@ func EnsureTopics(ctx context.Context, cfg *config.Kafka) error {
 	return nil
 }
 
-// NewReplyReader builds a consumer-group reader for the saga replies topic.
 // CommitInterval 0 disables periodic auto-commit so the reply consumer acks a
 // reply only after the orchestrator has handled it.
 func NewReplyReader(cfg *config.Kafka) *kafka.Reader {
@@ -73,7 +68,6 @@ func NewReplyReader(cfg *config.Kafka) *kafka.Reader {
 	})
 }
 
-// brokers splits the comma-separated broker list into trimmed addresses.
 func brokers(cfg *config.Kafka) []string {
 	parts := strings.Split(cfg.Brokers, ",")
 	for i := range parts {

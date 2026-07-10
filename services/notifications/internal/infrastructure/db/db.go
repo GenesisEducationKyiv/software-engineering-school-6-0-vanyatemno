@@ -1,8 +1,5 @@
-// Package db connects the notifications service to its own Postgres and runs
-// its embedded migrations. This database holds the durable delivery records
-// that make the notifier a genuine participant in the distributed transaction —
-// it commits a local row transition (SENDING → SENT/FAILED) per confirmation
-// email, which the saga reply is derived from.
+// Package db connects the notifications service to its own Postgres and runs its
+// embedded migrations.
 package db
 
 import (
@@ -28,8 +25,8 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Connect opens a pgxpool to the notifier's Postgres, runs pending migrations
-// and returns the pool. Callers own the pool and must Close it on shutdown.
+// Connect also runs pending migrations. Callers own the returned pool and must
+// Close it on shutdown.
 func Connect(cfg *config.Database) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
@@ -81,8 +78,6 @@ func runMigrations(poolCfg *pgxpool.Config) error {
 	return nil
 }
 
-// toMigrateURL renders the parsed pgx connection details as a pgx5:// URL for
-// the golang-migrate pgx/v5 driver (same approach as the API service).
 func toMigrateURL(cfg *pgxpool.Config) string {
 	cc := cfg.ConnConfig
 	u := &url.URL{

@@ -1,8 +1,6 @@
-// Package relay drains the transactional outbox to Kafka. It runs as a
-// background loop in the API service: each tick it reads unpublished outbox
-// rows and publishes them, marking each published on success. This decouples
-// the database commit (which persists the command) from the Kafka publish,
-// making the command emission reliable (at-least-once) rather than a dual-write.
+// Package relay drains the transactional outbox to Kafka in a background loop,
+// decoupling the DB commit from the publish so command emission is at-least-once,
+// not a dual-write.
 package relay
 
 import (
@@ -15,12 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Producer publishes messages to Kafka (satisfied by *kafka.Writer).
 type Producer interface {
 	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
 }
 
-// Store is the subset of the outbox repository the relay needs.
 type Store interface {
 	GetUnpublished(ctx context.Context, limit int) ([]*models.OutboxMessage, error)
 	MarkPublished(ctx context.Context, id string) error
@@ -38,7 +34,6 @@ func New(store Store, producer Producer, interval time.Duration, batch int) *Rel
 	return &Relay{store: store, producer: producer, interval: interval, batch: batch}
 }
 
-// Run drains the outbox on each tick until ctx is canceled.
 func (r *Relay) Run(ctx context.Context) {
 	zap.L().Info("outbox relay started", zap.Duration("interval", r.interval))
 	ticker := time.NewTicker(r.interval)
